@@ -1,0 +1,23 @@
+DESCRIPTION >
+    One row per error (event `error`). `component`: policy | grounding | reflection (a failed VLM call),
+    run (the run aborted, including Ctrl-C), telemetry (a Tinybird send that failed and was dropped;
+    it lands with a later successful send). `retry_count` = retries attempted before giving up.
+
+TOKEN "agent_telemetry_append" APPEND
+
+SCHEMA >
+    `timestamp` DateTime64(3) `json:$.timestamp`,
+    `event_id` String `json:$.event_id`,
+    `run_id` String `json:$.run_id`,
+    `model` LowCardinality(String) `json:$.model`,
+    `episode_id` Nullable(String) `json:$.episode_id`,
+    `episode_index` Nullable(UInt32) `json:$.episode_index`,
+    `step_index` Nullable(UInt16) `json:$.step_index`,
+    `component` LowCardinality(String) `json:$.component`,
+    `error_type` String `json:$.error_type`,
+    `message` String `json:$.message`,
+    `retry_count` UInt8 `json:$.retry_count`
+
+ENGINE MergeTree
+ENGINE_PARTITION_KEY toYYYYMM(timestamp)
+ENGINE_SORTING_KEY component, run_id, timestamp

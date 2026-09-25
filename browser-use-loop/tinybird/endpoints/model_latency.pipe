@@ -1,0 +1,40 @@
+DESCRIPTION >
+    VLM call latency per call type (policy, grounding, reflection) and model: average, p50, p95, max,
+    plus average generated tokens. Filters: run_id, model, learning_enabled (1 = --learn runs, 0 = without), since, until.
+
+TOKEN "agent_analytics_read" READ
+
+NODE latency_by_call_type
+SQL >
+    %
+    SELECT
+        call_type,
+        model,
+        count() AS calls,
+        round(avg(latency_ms), 1) AS avg_ms,
+        round(quantile(0.5)(latency_ms), 1) AS p50_ms,
+        round(quantile(0.95)(latency_ms), 1) AS p95_ms,
+        round(max(latency_ms), 1) AS max_ms,
+        round(avg(generation_tokens), 1) AS avg_generation_tokens
+    FROM model_calls
+    WHERE
+        1 = 1
+        {% if defined(run_id) %}
+            AND run_id = {{ String(run_id, description="Only this run (agent.py RUN_ID)") }}
+        {% end %}
+        {% if defined(model) %} AND model = {{ String(model, description="Only this model") }} {% end %}
+        {% if defined(learning_enabled) %}
+            AND learning_enabled = {{ Boolean(learning_enabled) }}
+        {% end %}
+        {% if defined(since) %}
+            AND timestamp
+            >= {{ DateTime(since, description="Inclusive lower bound, YYYY-MM-DD HH:MM:SS (UTC)") }}
+        {% end %}
+        {% if defined(until) %}
+            AND timestamp
+            < {{ DateTime(until, description="Exclusive upper bound, YYYY-MM-DD HH:MM:SS (UTC)") }}
+        {% end %}
+    GROUP BY call_type, model
+    ORDER BY call_type, model
+
+TYPE ENDPOINT

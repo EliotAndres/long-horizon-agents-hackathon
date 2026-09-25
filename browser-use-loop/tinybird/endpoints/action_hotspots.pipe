@@ -1,0 +1,45 @@
+DESCRIPTION >
+    Actions the agent repeats or that fail most, grouped by action type and (lowercased) target.
+    repeats = uses beyond the first within the same episode; dead_actions = ran but the screen did not change;
+    grounding_failures = click target not found. Filters: run_id, model, learning_enabled (1 = --learn runs, 0 = without), since, until,
+    min_uses (default 2), limit (default 50).
+
+TOKEN "agent_analytics_read" READ
+
+NODE hotspots
+SQL >
+    %
+    SELECT
+        action_type,
+        trimBoth(lower(action_arg)) AS target,
+        count() AS uses,
+        uniqExact(episode_id) AS episodes,
+        uses - episodes AS repeats,
+        countIf(NOT screen_changed) AS dead_actions,
+        countIf(NOT executed) AS grounding_failures,
+        round((dead_actions + grounding_failures) / uses, 4) AS failure_rate,
+        max(timestamp) AS last_seen
+    FROM agent_steps
+    WHERE
+        1 = 1
+        {% if defined(run_id) %}
+            AND run_id = {{ String(run_id, description="Only this run (agent.py RUN_ID)") }}
+        {% end %}
+        {% if defined(model) %} AND model = {{ String(model, description="Only this model") }} {% end %}
+        {% if defined(learning_enabled) %}
+            AND learning_enabled = {{ Boolean(learning_enabled) }}
+        {% end %}
+        {% if defined(since) %}
+            AND timestamp
+            >= {{ DateTime(since, description="Inclusive lower bound, YYYY-MM-DD HH:MM:SS (UTC)") }}
+        {% end %}
+        {% if defined(until) %}
+            AND timestamp
+            < {{ DateTime(until, description="Exclusive upper bound, YYYY-MM-DD HH:MM:SS (UTC)") }}
+        {% end %}
+    GROUP BY action_type, target
+    HAVING uses >= {{ Int32(min_uses, 2, description="Hide actions used fewer times than this") }}
+    ORDER BY dead_actions + grounding_failures + repeats DESC, uses DESC
+    LIMIT {{ Int32(limit, 50, description="Max rows") }}
+
+TYPE ENDPOINT

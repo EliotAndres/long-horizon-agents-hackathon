@@ -1,0 +1,42 @@
+DESCRIPTION >
+    How many steps successful episodes took: average, median, p95, min and max,
+    per model and learning setting. Filters: run_id, model, learning_enabled (1 = --learn runs, 0 = without), since, until.
+
+TOKEN "agent_analytics_read" READ
+
+NODE steps_of_successful_episodes
+SQL >
+    %
+    SELECT
+        model,
+        learning_enabled,
+        count() AS successful_episodes,
+        round(avg(steps), 2) AS avg_steps,
+        quantile(0.5)
+        (steps) AS median_steps,
+        quantile(0.95)
+        (steps) AS p95_steps,
+        min(steps) AS min_steps,
+        max(steps) AS max_steps
+    FROM episode_results
+    WHERE
+        success
+        {% if defined(run_id) %}
+            AND run_id = {{ String(run_id, description="Only this run (agent.py RUN_ID)") }}
+        {% end %}
+        {% if defined(model) %} AND model = {{ String(model, description="Only this model") }} {% end %}
+        {% if defined(learning_enabled) %}
+            AND learning_enabled = {{ Boolean(learning_enabled) }}
+        {% end %}
+        {% if defined(since) %}
+            AND timestamp
+            >= {{ DateTime(since, description="Inclusive lower bound, YYYY-MM-DD HH:MM:SS (UTC)") }}
+        {% end %}
+        {% if defined(until) %}
+            AND timestamp
+            < {{ DateTime(until, description="Exclusive upper bound, YYYY-MM-DD HH:MM:SS (UTC)") }}
+        {% end %}
+    GROUP BY model, learning_enabled
+    ORDER BY model, learning_enabled
+
+TYPE ENDPOINT
