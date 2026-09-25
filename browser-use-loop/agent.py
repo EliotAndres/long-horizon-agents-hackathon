@@ -9,6 +9,9 @@ runs/lessons.json, which are fed into later episodes' prompts.
     uv run agent.py --episodes 5 --video           # headless, save captioned videos
     uv run agent.py --episodes 20 --learn          # learn from own attempts
     uv run agent.py --episodes 1 --show            # watch Chrome
+
+Optional: with TINYBIRD_TELEMETRY_ENABLED=true and TINYBIRD_TOKEN set, traces also go to Tinybird
+(telemetry.py, tinybird/README.md). Local outputs under runs/ are the same either way.
 """
 
 import argparse
@@ -27,6 +30,9 @@ from mlx_vlm import apply_chat_template, generate, load
 from mlx_vlm.structured import build_json_schema_logits_processor
 from PIL import Image, ImageDraw, ImageFont
 
+import telemetry
+from telemetry import lesson_id, screenshot_meta
+
 gym.register_envs(miniwob)
 
 MODEL = "LiquidAI/LFM2.5-VL-3B-MLX-8bit"
@@ -34,8 +40,10 @@ W, H = 160, 210  # MiniWoB task area in page pixels
 SCALE = 3  # screenshot upscale for the VLM
 LESSONS_FILE = Path("runs/lessons.json")
 FRAMES_DIR = Path("runs/frames")  # per-step screenshots (red dot = click), read by report.py
+ARTIFACTS_FILE = Path("runs/artifacts.jsonl")  # which run/step each frame came from (sha256), since frames are reused per seed
 RUN_ID = time.strftime("%Y%m%d-%H%M%S")
 FONT = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial.ttf", 16)
+TELEMETRY = telemetry.NoopTelemetry()  # Tinybird traces, set up in main() from TINYBIRD_* env vars
 
 PROMPT = """You control a web page by looking at screenshots. Complete the task.
 Image 1: the screen BEFORE your last action. Image 2: the screen NOW. Compare them to see
@@ -111,15 +119,26 @@ Answer in JSON: {{"remove": [numbers], "lessons": [new lessons]}}"""
 EXAMPLE_LESSONS = {l[2:] for l in REFLECT_PROMPT.splitlines() if l.startswith("- If ")}
 
 
-def ask(model, processor, prompt, image, schema, max_tokens, temperature=0.0):
+def ask(model, processor, prompt, image, schema, max_tokens, temperature=0.0, *, call_type):
     """One VLM call whose output is forced to match `schema`; returns the parsed dict.
-    `image` is one PIL image or a list of them (in order)."""
+    `image` is one PIL image or a list of them (in order). `call_type` labels it in telemetry."""
     images = image if isinstance(image, list) else [image]
     chat = apply_chat_template(processor, model.config, prompt, num_images=len(images))
     constrain = build_json_schema_logits_processor(processor.tokenizer, schema)
-    out = generate(model, processor, chat, image=images, max_tokens=max_tokens, temperature=temperature,
-                   logits_processors=[constrain], verbose=False)
-    return json.loads(getattr(out, "text", out))
+    t0 = time.perf_counter()
+    try:
+        out = generate(model, processor, chat, image=images, max_tokens=max_tokens, temperature=temperature,
+                       logits_processors=[constrain], verbose=False)
+        result = json.loads(getattr(out, "text", out))
+    except Exception as e:
+        TELEMETRY.error(call_type, e)
+        raise
+    TELEMETRY.model_call(call_type, prompt, result, (time.perf_counter() - t0) * 1000, image_count=len(images),
+                         max_tokens=max_tokens, temperature=temperature,
+                         prompt_tokens=getattr(out, "prompt_tokens", None),
+                         generation_tokens=getattr(out, "generation_tokens", None),
+                         finish_reason=getattr(out, "finish_reason", None))
+    return result
 
 
 def big(screenshot):
@@ -128,7 +147,8 @@ def big(screenshot):
 
 def ground(model, processor, img, target):
     """Bounding box of `target` on the screenshot -> click point in page pixels, or None."""
-    x1, y1, x2, y2 = ask(model, processor, GROUND_PROMPT.format(target=target), img, BBOX_SCHEMA, 60)["bbox"]  # [0, 1000]
+    x1, y1, x2, y2 = ask(model, processor, GROUND_PROMPT.format(target=target), img, BBOX_SCHEMA, 60,
+                         call_type="grounding")["bbox"]  # [0, 1000]
     if x2 <= x1 or y2 <= y1:
         return None
     return (x1 + x2) / 2000 * W, (y1 + y2) / 2000 * H
@@ -236,7 +256,7 @@ def reflect(model, processor, task, reward, shots, history, lessons):
         trace="\n".join(f"{i}: {h}" for i, h in enumerate(history)),
         known="\n".join(f"{i}. {l}" for i, l in enumerate(lessons)) or "(none)",
     )
-    out = ask(model, processor, prompt, contact_sheet(shots), LESSONS_SCHEMA, 250)
+    out = ask(model, processor, prompt, contact_sheet(shots), LESSONS_SCHEMA, 250, call_type="reflection")
     remove = sorted({i for i in out["remove"] if i < len(lessons)}, reverse=True)
     removed = [lessons.pop(i) for i in remove]
     for l in removed:
@@ -252,22 +272,29 @@ def reflect(model, processor, task, reward, shots, history, lessons):
     return kept, removed
 
 
-def run_episode(env, model, processor, seed, max_steps, log, video=False, temperature=0.0, lessons=None):
+def run_episode(env, model, processor, seed, max_steps, log, video=False, temperature=0.0, lessons=None, episode_index=0):
     env.reset(seed=seed)
     obs = prepare_episode(env)
     task = obs["utterance"]
     history, frames, shots, reward, done, steps, new, removed = [], [], [], -1.0, False, [], [], []
     prev_img = big(obs["screenshot"])  # at the start, "before" == "now"
+    episode_id, known = f"{RUN_ID}-{episode_index:03d}", len(lessons or [])
+    active = (lessons or [])[-10:]  # the lessons this episode's prompt shows
+    active_ids = [lesson_id(l) for l in active]
+    TELEMETRY.context.update(episode_id=episode_id, episode_index=episode_index, seed=seed, step_index=None)
+    TELEMETRY.emit("episode_started", task=task, known_lesson_count=known, active_lesson_ids=active_ids, active_lessons=active)
+    t_episode = time.perf_counter()
     print(f"\n=== seed {seed}: {task}")
     for t in range(max_steps):
         t0 = time.time()
+        TELEMETRY.context["step_index"] = t
         img = big(obs["screenshot"])
         prompt = PROMPT.format(
             task=task,
             history="\n".join(history[-8:]) or "(none)",
-            lessons="".join(f"\nLesson from past attempts: {l}" for l in (lessons or [])[-10:]),
+            lessons="".join(f"\nLesson from past attempts: {l}" for l in active),
         )
-        out = ask(model, processor, prompt, [prev_img, img], ACTION_SCHEMA, 150, temperature)
+        out = ask(model, processor, prompt, [prev_img, img], ACTION_SCHEMA, 150, temperature, call_type="policy")
         raw = f"State: {out['state']}\nAction: {out['action']}(\"{out['arg']}\")"
         env_action, line, pt = execute(env, model, processor, (out["action"], out["arg"]), img)
         print(f"  {t:2d} [{time.time() - t0:.1f}s] {line}")
@@ -275,20 +302,35 @@ def run_episode(env, model, processor, seed, max_steps, log, video=False, temper
         if video:
             frames.append(frame(shots[-1], wrap(f"step {t}  ({time.time() - t0:.1f}s)\n{raw}\n=> {line}")[:450]))
         history.append(line)
-        Image.fromarray(shots[-1]).save(FRAMES_DIR / f"seed{seed}_{t:02d}.png")
+        frame_path = FRAMES_DIR / f"seed{seed}_{t:02d}.png"
+        Image.fromarray(shots[-1]).save(frame_path)
         steps.append({"state": out["state"], "action": f'{out["action"]}("{out["arg"]}")', "result": line, "changed": True})
-        if env_action is None:
-            continue
-        before = obs["screenshot"]
-        obs, _, done, _, info = env.step(env_action)
+        if env_action is not None:
+            before = obs["screenshot"]
+            obs, _, done, _, info = env.step(env_action)
+            if done:
+                reward = info["raw_reward"]
+            else:
+                prev_img = img
+                if screen_unchanged(before, obs["screenshot"]):
+                    history[-1] += " -> the screen did NOT change"
+                    steps[-1]["changed"] = False
+                    print("       (screen did not change)")
+        shot = screenshot_meta(frame_path)
+        try:  # the frame index is extra: never lose an episode over it
+            with open(ARTIFACTS_FILE, "a") as f:
+                f.write(json.dumps({"run": RUN_ID, "episode_id": episode_id, "seed": seed, "step": t, **shot}) + "\n")
+        except OSError as e:
+            print(f"       (could not append to {ARTIFACTS_FILE}: {e})")
+        TELEMETRY.emit("agent_step", task=task, model_state=out["state"], action_type=out["action"], action_arg=out["arg"],
+                       action_result=line, executed=env_action is not None, screen_changed=steps[-1]["changed"],
+                       done=bool(done), step_latency_ms=round((time.time() - t0) * 1000, 1), lesson_count=known, **shot)
         if done:
-            reward = info["raw_reward"]
             break
-        prev_img = img
-        if screen_unchanged(before, obs["screenshot"]):
-            history[-1] += " -> the screen did NOT change"
-            steps[-1]["changed"] = False
-            print("       (screen did not change)")
+    TELEMETRY.context["step_index"] = None
+    TELEMETRY.emit("episode_result", task=task, reward=float(reward), success=bool(reward > 0), steps=len(steps),
+                   no_change_steps=sum(not s["changed"] for s in steps),
+                   duration_ms=round((time.perf_counter() - t_episode) * 1000), lesson_count=known, active_lesson_ids=active_ids)
     print(f"  => reward {reward}")
     if video:
         # on done, obs is blank, so reuse the last real screenshot
@@ -301,9 +343,14 @@ def run_episode(env, model, processor, seed, max_steps, log, video=False, temper
         LESSONS_FILE.write_text(json.dumps(lessons, indent=1))
         for l in new:
             print(f"  + lesson: {l}")
+        TELEMETRY.emit("reflection_result", reward=float(reward), success=bool(reward > 0), lessons_before=known,
+                       lessons_added=new, lessons_added_ids=[lesson_id(l) for l in new], lessons_removed=removed,
+                       lessons_removed_ids=[lesson_id(l) for l in removed], lessons_after_count=len(lessons))
     log.write(json.dumps({"run": RUN_ID, "seed": seed, "task": task, "reward": reward, "steps": steps,
-                          "lessons_added": new, "lessons_removed": removed}) + "\n")
+                          "lessons_added": new, "lessons_removed": removed,
+                          "episode_id": episode_id, "active_lesson_ids": active_ids}) + "\n")
     log.flush()
+    TELEMETRY.flush()
     return reward
 
 
@@ -319,16 +366,26 @@ def main():
     p.add_argument("--learn", action="store_true", help="reflect after each episode; lessons persist in runs/lessons.json")
     a = p.parse_args()
 
+    global TELEMETRY
+    TELEMETRY = telemetry.from_env()
+    TELEMETRY.context.update(run_id=RUN_ID, model=a.model, learning_enabled=a.learn)
+    TELEMETRY.emit("run_started", temperature=a.temperature, seed=a.seed, episodes=a.episodes, max_steps=a.max_steps)
+    TELEMETRY.flush()  # surfaces a bad token/host now rather than after the first episode
     model, processor = load(a.model)
     env = gym.make("miniwob/book-flight-v1", render_mode="human" if a.show else None, wait_ms=500)
     FRAMES_DIR.mkdir(parents=True, exist_ok=True)
     lessons = (json.loads(LESSONS_FILE.read_text()) if LESSONS_FILE.exists() else []) if a.learn else None
     try:
         with open("runs/trajectories.jsonl", "a") as log:
-            rewards = [run_episode(env, model, processor, a.seed + i, a.max_steps, log, a.video, a.temperature, lessons)
+            rewards = [run_episode(env, model, processor, a.seed + i, a.max_steps, log, a.video, a.temperature, lessons,
+                                   episode_index=i)
                        for i in range(a.episodes)]
+    except BaseException as e:  # record crashes and Ctrl-C, then let them propagate as before
+        TELEMETRY.error("run", e)
+        raise
     finally:
         env.close()
+        TELEMETRY.close()
     wins = sum(r > 0 for r in rewards)
     print(f"\nsuccess {wins}/{len(rewards)} = {wins / len(rewards):.0%}")
 

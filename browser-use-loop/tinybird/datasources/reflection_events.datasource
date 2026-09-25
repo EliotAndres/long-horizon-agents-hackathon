@@ -1,0 +1,26 @@
+DESCRIPTION >
+    One row per reflection (event `reflection_result`, only with --learn): how lesson memory changed
+    after an episode. Lesson ids are sha256(normalized text)[:16].
+
+TOKEN "agent_telemetry_append" APPEND
+
+SCHEMA >
+    `timestamp` DateTime64(3) `json:$.timestamp`,
+    `event_id` String `json:$.event_id`,
+    `run_id` String `json:$.run_id`,
+    `model` LowCardinality(String) `json:$.model`,
+    `episode_id` String `json:$.episode_id`,
+    `episode_index` UInt32 `json:$.episode_index`,
+    `seed` Int64 `json:$.seed`,
+    `reward` Float32 `json:$.reward`,
+    `success` Bool `json:$.success`,
+    `lessons_before` UInt32 `json:$.lessons_before`,
+    `lessons_added` Array(String) `json:$.lessons_added[:]`,
+    `lessons_added_ids` Array(String) `json:$.lessons_added_ids[:]`,
+    `lessons_removed` Array(String) `json:$.lessons_removed[:]`,
+    `lessons_removed_ids` Array(String) `json:$.lessons_removed_ids[:]`,
+    `lessons_after_count` UInt32 `json:$.lessons_after_count`
+
+ENGINE MergeTree
+ENGINE_PARTITION_KEY toYYYYMM(timestamp)
+ENGINE_SORTING_KEY run_id, episode_index
