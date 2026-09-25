@@ -33,9 +33,13 @@ MODEL = "LiquidAI/LFM2.5-VL-3B-MLX-8bit"
 W, H = 160, 210  # MiniWoB task area in page pixels
 SCALE = 3  # screenshot upscale for the VLM
 LESSONS_FILE = Path("runs/lessons.json")
+FRAMES_DIR = Path("runs/frames")  # per-step screenshots (red dot = click), read by report.py
+RUN_ID = time.strftime("%Y%m%d-%H%M%S")
 FONT = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial.ttf", 16)
 
-PROMPT = """You control a web page by looking at the screenshot. Complete the task.
+PROMPT = """You control a web page by looking at screenshots. Complete the task.
+Image 1: the screen BEFORE your last action. Image 2: the screen NOW. Compare them to see
+whether your last action worked.
 
 Task: {task}
 
@@ -72,8 +76,11 @@ BBOX_SCHEMA = {
 }
 LESSONS_SCHEMA = {
     "type": "object",
-    "properties": {"lessons": {"type": "array", "items": {"type": "string", "maxLength": 160}, "minItems": 1, "maxItems": 3}},
-    "required": ["lessons"],
+    "properties": {
+        "remove": {"type": "array", "items": {"type": "integer", "minimum": 0}, "maxItems": 10},
+        "lessons": {"type": "array", "items": {"type": "string", "maxLength": 160}, "minItems": 1, "maxItems": 3},
+    },
+    "required": ["remove", "lessons"],
 }
 
 REFLECT_PROMPT = """You are reviewing an attempt by a web agent, to help it do better next time.
@@ -85,8 +92,11 @@ The image is a grid of the screen before each step (step number in red; red dot 
 Steps (action -> result):
 {trace}
 
-Lessons already known:
+Lessons the agent was following (numbered):
 {known}
+
+First, list the numbers of lessons that led the agent into mistakes in this attempt
+(e.g. it followed the lesson and got stuck or the screen did not change). These will be deleted.
 
 What went wrong or right? Write 1 to 3 NEW general lessons that will help on ANY future task
 on this kind of website. Each lesson is reasoning of the form "if <situation you see> then <what to do>".
@@ -95,17 +105,19 @@ Good examples:
 - If a calendar is open, pick the date on it instead of typing.
 - If you typed in a field and suggestions appear, click the matching suggestion before moving on.
 - If the same action did not change the page, try a different action.
-Answer in JSON: {{"lessons": [...]}}"""
+Answer in JSON: {{"remove": [numbers], "lessons": [new lessons]}}"""
 
 
 EXAMPLE_LESSONS = {l[2:] for l in REFLECT_PROMPT.splitlines() if l.startswith("- If ")}
 
 
 def ask(model, processor, prompt, image, schema, max_tokens, temperature=0.0):
-    """One VLM call whose output is forced to match `schema`; returns the parsed dict."""
-    chat = apply_chat_template(processor, model.config, prompt, num_images=1)
+    """One VLM call whose output is forced to match `schema`; returns the parsed dict.
+    `image` is one PIL image or a list of them (in order)."""
+    images = image if isinstance(image, list) else [image]
+    chat = apply_chat_template(processor, model.config, prompt, num_images=len(images))
     constrain = build_json_schema_logits_processor(processor.tokenizer, schema)
-    out = generate(model, processor, chat, image=[image], max_tokens=max_tokens, temperature=temperature,
+    out = generate(model, processor, chat, image=images, max_tokens=max_tokens, temperature=temperature,
                    logits_processors=[constrain], verbose=False)
     return json.loads(getattr(out, "text", out))
 
@@ -170,6 +182,11 @@ def element_at_focus(env):
     )
 
 
+def screen_unchanged(a, b):
+    # ponytail: pixel-count threshold so a blinking text cursor (a few px) doesn't count as a change
+    return np.count_nonzero(np.any(a != b, axis=-1)) < 30
+
+
 def mark(screenshot, pt):
     """Screenshot with a red dot where we clicked."""
     img = Image.fromarray(screenshot)
@@ -217,20 +234,30 @@ def reflect(model, processor, task, reward, shots, history, lessons):
     prompt = REFLECT_PROMPT.format(
         task=task, outcome=outcome,
         trace="\n".join(f"{i}: {h}" for i, h in enumerate(history)),
-        known="\n".join(f"- {l}" for l in lessons) or "(none)",
+        known="\n".join(f"{i}. {l}" for i, l in enumerate(lessons)) or "(none)",
     )
-    new = [l.strip() for l in ask(model, processor, prompt, contact_sheet(shots), LESSONS_SCHEMA, 200)["lessons"] if len(l) > 10]
+    out = ask(model, processor, prompt, contact_sheet(shots), LESSONS_SCHEMA, 250)
+    remove = sorted({i for i in out["remove"] if i < len(lessons)}, reverse=True)
+    removed = [lessons.pop(i) for i in remove]
+    for l in removed:
+        print(f"  x removed lesson: {l}")
+    proposed = [l.strip() for l in out["lessons"]]
+    new = [l for l in proposed if len(l) > 10]
     # Keep lessons general: drop ones that leak this episode's values (quoted strings, dates, airport codes).
     specific = set(re.findall(r"\b[A-Z]{3}\b|\d+/\d+/\d+", task)) | set(re.findall(r"from: (.*?) to", task))
     new = [l for l in new if not any(s in l for s in specific) and not re.search(r"\d+/\d+|\(\d+,\s*\d+\)", l)]
-    return [l for l in new if l not in lessons and l not in EXAMPLE_LESSONS][:3]
+    kept = [l for l in new if l not in lessons and l not in EXAMPLE_LESSONS][:3]
+    for l in set(proposed) - set(kept):
+        print(f"  - dropped lesson: {l}")
+    return kept, removed
 
 
 def run_episode(env, model, processor, seed, max_steps, log, video=False, temperature=0.0, lessons=None):
     env.reset(seed=seed)
     obs = prepare_episode(env)
     task = obs["utterance"]
-    history, frames, shots, reward, done = [], [], [], -1.0, False
+    history, frames, shots, reward, done, steps, new, removed = [], [], [], -1.0, False, [], [], []
+    prev_img = big(obs["screenshot"])  # at the start, "before" == "now"
     print(f"\n=== seed {seed}: {task}")
     for t in range(max_steps):
         t0 = time.time()
@@ -240,7 +267,7 @@ def run_episode(env, model, processor, seed, max_steps, log, video=False, temper
             history="\n".join(history[-8:]) or "(none)",
             lessons="".join(f"\nLesson from past attempts: {l}" for l in (lessons or [])[-10:]),
         )
-        out = ask(model, processor, prompt, img, ACTION_SCHEMA, 150, temperature)
+        out = ask(model, processor, prompt, [prev_img, img], ACTION_SCHEMA, 150, temperature)
         raw = f"State: {out['state']}\nAction: {out['action']}(\"{out['arg']}\")"
         env_action, line, pt = execute(env, model, processor, (out["action"], out["arg"]), img)
         print(f"  {t:2d} [{time.time() - t0:.1f}s] {line}")
@@ -248,12 +275,20 @@ def run_episode(env, model, processor, seed, max_steps, log, video=False, temper
         if video:
             frames.append(frame(shots[-1], wrap(f"step {t}  ({time.time() - t0:.1f}s)\n{raw}\n=> {line}")[:450]))
         history.append(line)
+        Image.fromarray(shots[-1]).save(FRAMES_DIR / f"seed{seed}_{t:02d}.png")
+        steps.append({"state": out["state"], "action": f'{out["action"]}("{out["arg"]}")', "result": line, "changed": True})
         if env_action is None:
             continue
+        before = obs["screenshot"]
         obs, _, done, _, info = env.step(env_action)
         if done:
             reward = info["raw_reward"]
             break
+        prev_img = img
+        if screen_unchanged(before, obs["screenshot"]):
+            history[-1] += " -> the screen did NOT change"
+            steps[-1]["changed"] = False
+            print("       (screen did not change)")
     print(f"  => reward {reward}")
     if video:
         # on done, obs is blank, so reuse the last real screenshot
@@ -261,12 +296,13 @@ def run_episode(env, model, processor, seed, max_steps, log, video=False, temper
         save_video(frames, f"runs/episode_seed{seed}")
         print(f"  video: runs/episode_seed{seed}.mp4")
     if lessons is not None:
-        new = reflect(model, processor, task, reward, shots, history, lessons)
+        new, removed = reflect(model, processor, task, reward, shots, history, lessons)
         lessons.extend(new)
         LESSONS_FILE.write_text(json.dumps(lessons, indent=1))
         for l in new:
             print(f"  + lesson: {l}")
-    log.write(json.dumps({"seed": seed, "task": task, "reward": reward, "history": history}) + "\n")
+    log.write(json.dumps({"run": RUN_ID, "seed": seed, "task": task, "reward": reward, "steps": steps,
+                          "lessons_added": new, "lessons_removed": removed}) + "\n")
     log.flush()
     return reward
 
@@ -285,7 +321,7 @@ def main():
 
     model, processor = load(a.model)
     env = gym.make("miniwob/book-flight-v1", render_mode="human" if a.show else None, wait_ms=500)
-    Path("runs").mkdir(exist_ok=True)
+    FRAMES_DIR.mkdir(parents=True, exist_ok=True)
     lessons = (json.loads(LESSONS_FILE.read_text()) if LESSONS_FILE.exists() else []) if a.learn else None
     try:
         with open("runs/trajectories.jsonl", "a") as log:
