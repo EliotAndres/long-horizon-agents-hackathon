@@ -126,7 +126,6 @@ class Run(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as d, \
                 mock.patch.object(main, "ask", fake_ask), \
-                mock.patch.object(main, "find_popup_close", return_value=None), \
                 mock.patch.object(main, "screenshot", side_effect=lambda page: Image.new("RGB", (1280, 800))), \
                 mock.patch.object(main, "save_video"), \
                 mock.patch.object(main, "trace", side_effect=lambda table, **row: rows.append((table, row))):
@@ -139,8 +138,8 @@ class Run(unittest.TestCase):
         self.assertEqual(history, ['scroll("down") -> the screen did NOT change', 'done("42")'])
         self.assertEqual(len(frames), 2)
         today = datetime.date.today().isoformat()
-        self.assertEqual(prompts, [main.PROMPT.format(today=today, task=TASK, history="(none)"),
-                                   main.PROMPT.format(today=today, task=TASK, history=history[0])])
+        self.assertEqual(prompts, [main.PROMPT.format(today=today, task=TASK, history="(none)", learnings=""),
+                                   main.PROMPT.format(today=today, task=TASK, history=history[0], learnings="")])
         self.assertEqual([(t, set(r)) for t, r in rows], [("v4_steps", STEP_KEYS)] * 2)
 
     def test_with_learn_prompt_gets_the_lessons_and_steps_record_them(self):
@@ -155,7 +154,7 @@ class Run(unittest.TestCase):
 
     def test_learn_flag_defaults_off(self):
         with tempfile.TemporaryDirectory() as d, contextlib.chdir(d), \
-                mock.patch("sys.argv", ["main.py", "--url", "https://x"]), \
+                mock.patch("sys.argv", ["main.py", TASK, "--url", "https://x"]), \
                 mock.patch.object(main, "load", side_effect=SystemExit), mock.patch.object(learning, "load") as load:
             with self.assertRaises(SystemExit):
                 main.main()

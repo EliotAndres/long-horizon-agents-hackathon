@@ -1,10 +1,11 @@
-"""natural-language flight question -> Nimble picks the website -> on-device VLM browses it.
+"""Generic web task in plain English -> Nimble picks the website -> on-device VLM browses it.
 
-    NIMBLE_API_KEY=... RAWTREE_API_KEY=... uv run main.py "Give me the cheapest flights from LA to SF on the 26th of September"
-    uv run main.py "..." --url https://www.kayak.com      # skip step A
-    uv run main.py "..." --learn                          # use + update lessons in runs/lessons.json (learning.py)
+    NIMBLE_API_KEY=... RAWTREE_API_KEY=... uv run main.py "Find a vegan restaurant in Mission SF open tonight"
+    uv run main.py "Add oat milk to my grocery cart" --url https://www.instacart.com   # skip step A
+    uv run main.py "..." --learn                          # also use + update own lessons in runs/lessons.json (learning.py)
 
-A: Nimble web search for the question; the local VLM picks which result to open.
+A: Nimble web search for the task; the local VLM picks which result to open.
+L: load generic learnings (if/then rules another agent writes to RawTree table `v4_learnings`).
 B: loop: B1 load page, B2 screenshot -> VLM -> action, B3 do it, B4 send the step trace to RawTree.
 Screenshots and a captioned replay.mp4 (1.5s per step, red circle = click) go to runs/<run_id>/. Traces are skipped when RAWTREE_API_KEY is unset.
 Optional NIMBLE_PROXY=http://account-...:pass@ip.nimbleway.com:7000 routes the browser through Nimble.
@@ -37,9 +38,9 @@ UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML,
 RUN_ID = time.strftime("%Y%m%d-%H%M%S")
 FONT = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial.ttf", 20)
 BOLD = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial Bold.ttf", 22)
-MODEL_MS = {}  # model time per call kind (policy, grounding, popup_check, ...) since the last step, for --learn traces
+MODEL_MS = {}  # model time per call kind (policy, grounding, ...) since the last step, for --learn traces
 
-PICK_PROMPT = """Which search result is a website where you can search for flights and see prices for this request?
+PICK_PROMPT = """Which search result is the website where this task can best be done?
 
 Request: {task}
 
@@ -55,15 +56,13 @@ Task: {task}
 
 Actions done so far:
 {history}
-
+{learnings}
 Pick the next action. Answer in JSON:
 "thought": what you see and why you pick this action,
 "action": "click", "type", "enter", "scroll" or "done",
 "arg": for click, what to click; for type, the text; for scroll, "up" or "down";
-for done, the answer to the task (flights with times and prices you see).
-If your last action did NOT change the screen, do not repeat it; try a different action.
-Click a field before typing into it. After typing a city, click the matching suggestion.
-Use "done" only when flight results with prices are visible."""
+for done, the answer to the task (what you found on the screen).
+Use "done" only when the screen shows what the task asks for."""
 
 ACTION = {
     "type": "object",
@@ -74,8 +73,6 @@ ACTION = {
     },
     "required": ["thought", "action", "arg"],
 }
-POPUP_PROMPT = 'Is a popup or dialog window open on top of the page, covering part of it? Answer in JSON: {"popup": "yes" or "no"}'
-POPUP = {"type": "object", "properties": {"popup": {"enum": ["yes", "no"]}}, "required": ["popup"]}
 BBOX = {
     "type": "object",
     "properties": {"bbox": {"type": "array", "items": {"type": "integer", "minimum": 0, "maximum": 1000},
@@ -114,6 +111,20 @@ def trace(table, **row):
         print(f"  (rawtree trace failed: {e})", file=sys.stderr)
 
 
+def load_learnings(limit=10):
+    """Step L: the newest generic if/then learnings from RawTree (written by a separate learning agent)."""
+    key = os.environ.get("RAWTREE_API_KEY")
+    if not key:
+        return []
+    base = os.environ.get("RAWTREE_BASE_URL", "https://api.rawtree.com")
+    try:
+        rows = post(f"{base}/v1/query", {"sql": f"SELECT text FROM v4_learnings ORDER BY ts DESC LIMIT {limit}"}, key)["data"]
+    except Exception as e:  # no table yet, or RawTree down: run without learnings
+        print(f"  (no learnings loaded: {e})", file=sys.stderr)
+        return []
+    return [r["text"] for r in rows if r.get("text")]
+
+
 def search(task):
     """Step A: Nimble web search -> [(title, url)]."""
     body = post("https://sdk.nimbleway.com/v2/search",
@@ -140,18 +151,6 @@ def pick_site(model, processor, task):
 def proxy():
     u = urlparse(os.environ["NIMBLE_PROXY"]) if os.environ.get("NIMBLE_PROXY") else None
     return u and {"server": f"{u.scheme}://{u.hostname}:{u.port}", "username": u.username, "password": u.password}
-
-
-def find_popup_close(model, processor, img):
-    """Atomic check before each step: is a popup covering the page? -> where its close button (X) is, else None.
-    The 3B model over-says "yes"; a real X comes back as a small box, a false alarm as empty or full-screen."""
-    if ask(model, processor, POPUP_PROMPT, POPUP, img, 20, "popup_check")["popup"] != "yes":
-        return None
-    x1, y1, x2, y2 = ask(model, processor, "Detect the close button (X) of the popup. Output its bounding box as JSON.",
-                         BBOX, img, 60, "popup_check")["bbox"]
-    if not (0 < x2 - x1 < 100 and 0 < y2 - y1 < 100):  # ponytail: a close button is <10% of the screen each way
-        return None
-    return (x1 + x2) / 2000 * VIEW["width"], (y1 + y2) / 2000 * VIEW["height"]
 
 
 def act(page, model, processor, img, kind, arg):
@@ -211,7 +210,7 @@ def save_video(frames, path):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("task", nargs="?", default="Give me the cheapest flights from LA to SF on the 26th of September")
+    p.add_argument("task", help='e.g. "Find a vegan restaurant in Mission SF open tonight"')
     p.add_argument("--url", help="skip the Nimble search and start here")
     p.add_argument("--max-steps", type=int, default=30)
     p.add_argument("--learn", action="store_true", help="show lessons from runs/lessons.json to the policy, reflect after the run to update them")
@@ -226,16 +225,18 @@ def main():
 
     url = a.url or pick_site(model, processor, a.task)
     print(f"task: {a.task}\nsite: {url}\nproxy: {'nimble' if proxy() else 'none'}")
+    learnings = load_learnings()
+    print(f"learnings: {len(learnings)}" + "".join(f"\n  - {l}" for l in learnings))
     if a.learn:
         print(f"lessons: using {len(used)} of {len(lessons)}", *(f"  - [{l['id']}] {l['text']}" for l in used), sep="\n")
-    trace("v4_runs", task=a.task, url=url, model=MODEL, **learn)
+    trace("v4_runs", task=a.task, url=url, model=MODEL, learnings=learnings, **learn)
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True, proxy=proxy())
         page = browser.new_page(viewport=VIEW, user_agent=UA)
         page.goto(url, wait_until="domcontentloaded", timeout=90_000)  # B1
         page.wait_for_timeout(3000)
-        answer, history, frames = run(page, model, processor, a.task, out_dir, a.max_steps, used)
+        answer, history, frames = run(page, model, processor, a.task, out_dir, a.max_steps, used, learnings)
         browser.close()
 
     if a.learn:
@@ -268,10 +269,11 @@ def reflect(model, processor, task, answer, history, frames, used):
           lessons_active_after=sum(l["active"] for l in lessons), latency_ms=round((time.time() - t0) * 1000), error=error)
 
 
-def run(page, model, processor, task, out_dir, max_steps, lessons=None):
-    """Step B on an already-loaded page. `lessons` (--learn only) go into the policy prompt.
+def run(page, model, processor, task, out_dir, max_steps, lessons=None, learnings=()):
+    """Step B on an already-loaded page. `learnings` (step L) and `lessons` (--learn only) go into the policy prompt.
     Returns (answer or None, history lines, captioned frames)."""
-    history, answer, frames, check_popup = [], None, [], True
+    history, answer, frames = [], None, []
+    tips = "".join(f"\nLearning from past runs (follow it when it applies): {l}" for l in learnings)
     img = screenshot(page)
     for t in range(max_steps):
         t0 = time.time()  # B2: img is the current screen
@@ -279,16 +281,10 @@ def run(page, model, processor, task, out_dir, max_steps, lessons=None):
         shot = out_dir / f"{t:02d}.png"
         img.save(shot)
         seen, url_before = img, page.url
-        pt = check_popup and find_popup_close(model, processor, img)
-        if pt:
-            page.mouse.click(*pt)
-            d = {"thought": "A popup covers the page, so I close it first.", "action": "close_popup", "arg": ""}
-            line = f"close popup at ({pt[0]:.0f},{pt[1]:.0f})"
-        else:
-            prompt = PROMPT.format(today=datetime.date.today().isoformat(), task=task,
-                                   history="\n".join(history) or "(none)") + learning.prompt_block(lessons or ())
-            d = ask(model, processor, prompt, ACTION, img)
-            line, pt = act(page, model, processor, img, d["action"], d["arg"])  # B3
+        prompt = PROMPT.format(today=datetime.date.today().isoformat(), task=task,
+                               history="\n".join(history) or "(none)", learnings=tips) + learning.prompt_block(lessons or ())
+        d = ask(model, processor, prompt, ACTION, img)
+        line, pt = act(page, model, processor, img, d["action"], d["arg"])  # B3
         if d["action"] != "done":
             page.wait_for_timeout(2000)
             img = screenshot(page)
@@ -301,8 +297,6 @@ def run(page, model, processor, task, out_dir, max_steps, lessons=None):
         trace("v4_steps", step=t, page_url=page.url, thought=d["thought"], action=d["action"], arg=d["arg"],
               result=line, screenshot=str(shot), latency_ms=round((time.time() - t0) * 1000), **learn)  # B4
         history.append(line)
-        # a "close" that changed nothing was a false alarm: let the policy act next step instead of looping on it
-        check_popup = not (d["action"] == "close_popup" and line.endswith("NOT change"))
         if d["action"] == "done":
             answer = d["arg"]
             break
