@@ -1,4 +1,4 @@
-"""v4: natural-language flight question -> Nimble picks the website -> on-device VLM browses it.
+"""natural-language flight question -> Nimble picks the website -> on-device VLM browses it.
 
     NIMBLE_API_KEY=... RAWTREE_API_KEY=... uv run main.py "Give me the cheapest flights from LA to SF on the 26th of September"
     uv run main.py "..." --url https://www.kayak.com      # skip step A
