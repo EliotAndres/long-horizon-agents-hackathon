@@ -1,0 +1,42 @@
+DESCRIPTION >
+    Is the agent improving? Per episode index within a run (or buckets of `bucket` episodes): success rate,
+    average steps, dead-action rate and average lesson-memory size. episode_index restarts at 0 each run,
+    so without run_id the runs are pooled by index. Filter to --learn runs with learning_enabled=1, or
+    compare against learning_enabled=0.
+    Filters: run_id, model, learning_enabled (1 = --learn runs, 0 = without), since, until, bucket (default 1).
+
+TOKEN "agent_analytics_read" READ
+
+NODE curve
+SQL >
+    %
+    SELECT
+        intDiv(episode_index, greatest({{ Int32(bucket, 1, description="Episodes per point") }}, 1))
+        * greatest({{ Int32(bucket, 1) }}, 1) AS episode_bucket,
+        count() AS episodes,
+        round(countIf(success) / episodes, 4) AS success_rate,
+        round(avg(steps), 2) AS avg_steps,
+        round(sum(no_change_steps) / nullIf(sum(steps), 0), 4) AS dead_action_rate,
+        round(avg(lesson_count), 2) AS avg_lesson_count
+    FROM episode_results
+    WHERE
+        1 = 1
+        {% if defined(run_id) %}
+            AND run_id = {{ String(run_id, description="Only this run (agent.py RUN_ID)") }}
+        {% end %}
+        {% if defined(model) %} AND model = {{ String(model, description="Only this model") }} {% end %}
+        {% if defined(learning_enabled) %}
+            AND learning_enabled = {{ Boolean(learning_enabled) }}
+        {% end %}
+        {% if defined(since) %}
+            AND timestamp
+            >= {{ DateTime(since, description="Inclusive lower bound, YYYY-MM-DD HH:MM:SS (UTC)") }}
+        {% end %}
+        {% if defined(until) %}
+            AND timestamp
+            < {{ DateTime(until, description="Exclusive upper bound, YYYY-MM-DD HH:MM:SS (UTC)") }}
+        {% end %}
+    GROUP BY episode_bucket
+    ORDER BY episode_bucket
+
+TYPE ENDPOINT

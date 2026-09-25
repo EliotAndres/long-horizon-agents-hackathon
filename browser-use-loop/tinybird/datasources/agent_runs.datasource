@@ -1,0 +1,19 @@
+DESCRIPTION >
+    One row per agent run (event `run_started`): which model and settings a run used.
+
+TOKEN "agent_telemetry_append" APPEND
+
+SCHEMA >
+    `timestamp` DateTime64(3) `json:$.timestamp`,
+    `event_id` String `json:$.event_id`,
+    `run_id` String `json:$.run_id`,
+    `model` LowCardinality(String) `json:$.model`,
+    `learning_enabled` Bool `json:$.learning_enabled`,
+    `temperature` Float32 `json:$.temperature`,
+    `seed` Int64 `json:$.seed`,
+    `episodes` UInt32 `json:$.episodes`,
+    `max_steps` UInt32 `json:$.max_steps`
+
+ENGINE MergeTree
+ENGINE_PARTITION_KEY toYYYYMM(timestamp)
+ENGINE_SORTING_KEY run_id, timestamp

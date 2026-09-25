@@ -1,0 +1,40 @@
+DESCRIPTION >
+    Share of steps whose action ran but did not change the screen (screen_changed = false), and share of
+    clicks grounding could not place (executed = false), per model and learning setting.
+    Filters: run_id, model, learning_enabled (1 = --learn runs, 0 = without), since, until.
+
+TOKEN "agent_analytics_read" READ
+
+NODE dead_actions
+SQL >
+    %
+    SELECT
+        model,
+        learning_enabled,
+        count() AS steps,
+        countIf(NOT screen_changed) AS dead_actions,
+        round(dead_actions / steps, 4) AS dead_action_rate,
+        countIf(NOT executed) AS grounding_failures,
+        round(grounding_failures / steps, 4) AS grounding_failure_rate
+    FROM agent_steps
+    WHERE
+        1 = 1
+        {% if defined(run_id) %}
+            AND run_id = {{ String(run_id, description="Only this run (agent.py RUN_ID)") }}
+        {% end %}
+        {% if defined(model) %} AND model = {{ String(model, description="Only this model") }} {% end %}
+        {% if defined(learning_enabled) %}
+            AND learning_enabled = {{ Boolean(learning_enabled) }}
+        {% end %}
+        {% if defined(since) %}
+            AND timestamp
+            >= {{ DateTime(since, description="Inclusive lower bound, YYYY-MM-DD HH:MM:SS (UTC)") }}
+        {% end %}
+        {% if defined(until) %}
+            AND timestamp
+            < {{ DateTime(until, description="Exclusive upper bound, YYYY-MM-DD HH:MM:SS (UTC)") }}
+        {% end %}
+    GROUP BY model, learning_enabled
+    ORDER BY model, learning_enabled
+
+TYPE ENDPOINT

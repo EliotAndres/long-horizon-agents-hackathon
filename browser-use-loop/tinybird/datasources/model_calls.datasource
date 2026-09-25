@@ -1,0 +1,32 @@
+DESCRIPTION >
+    One row per VLM call (event `model_call`), `call_type` = policy | grounding | reflection.
+    The prompt is redacted before it leaves the machine, then stored as sha256 + a truncated preview.
+    `step_index` is null for reflection (it runs after the episode).
+
+TOKEN "agent_telemetry_append" APPEND
+
+SCHEMA >
+    `timestamp` DateTime64(3) `json:$.timestamp`,
+    `event_id` String `json:$.event_id`,
+    `run_id` String `json:$.run_id`,
+    `model` LowCardinality(String) `json:$.model`,
+    `learning_enabled` Bool `json:$.learning_enabled`,
+    `episode_id` String `json:$.episode_id`,
+    `episode_index` UInt32 `json:$.episode_index`,
+    `step_index` Nullable(UInt16) `json:$.step_index`,
+    `call_type` LowCardinality(String) `json:$.call_type`,
+    `prompt_sha256` String `json:$.prompt_sha256`,
+    `prompt_chars` UInt32 `json:$.prompt_chars`,
+    `prompt_preview` String `json:$.prompt_preview`,
+    `output_json` String `json:$.output_json`,
+    `latency_ms` Float64 `json:$.latency_ms`,
+    `image_count` UInt8 `json:$.image_count`,
+    `max_tokens` UInt16 `json:$.max_tokens`,
+    `temperature` Float32 `json:$.temperature`,
+    `prompt_tokens` Nullable(UInt32) `json:$.prompt_tokens`,
+    `generation_tokens` Nullable(UInt32) `json:$.generation_tokens`,
+    `finish_reason` Nullable(String) `json:$.finish_reason`
+
+ENGINE MergeTree
+ENGINE_PARTITION_KEY toYYYYMM(timestamp)
+ENGINE_SORTING_KEY call_type, run_id, timestamp

@@ -1,0 +1,23 @@
+DESCRIPTION >
+    One row per episode start (event `episode_started`), with the lessons shown in that episode's prompt.
+    `active_lesson_ids[i]` is sha256(normalized `active_lessons[i]`)[:16]; the same text always has the same id.
+
+TOKEN "agent_telemetry_append" APPEND
+
+SCHEMA >
+    `timestamp` DateTime64(3) `json:$.timestamp`,
+    `event_id` String `json:$.event_id`,
+    `run_id` String `json:$.run_id`,
+    `model` LowCardinality(String) `json:$.model`,
+    `learning_enabled` Bool `json:$.learning_enabled`,
+    `episode_id` String `json:$.episode_id`,
+    `episode_index` UInt32 `json:$.episode_index`,
+    `seed` Int64 `json:$.seed`,
+    `task` String `json:$.task`,
+    `known_lesson_count` UInt32 `json:$.known_lesson_count`,
+    `active_lesson_ids` Array(String) `json:$.active_lesson_ids[:]`,
+    `active_lessons` Array(String) `json:$.active_lessons[:]`
+
+ENGINE MergeTree
+ENGINE_PARTITION_KEY toYYYYMM(timestamp)
+ENGINE_SORTING_KEY run_id, episode_index

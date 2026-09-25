@@ -1,0 +1,40 @@
+DESCRIPTION >
+    Episode success rate (reward > 0) per run (by_run=1, default), or per model and learning setting (by_run=0).
+    Filters: run_id, model, learning_enabled (1 = --learn runs, 0 = without), since, until.
+
+TOKEN "agent_analytics_read" READ
+
+NODE success_rate_by_group
+SQL >
+    %
+    SELECT
+        {% if Boolean(by_run, True) %} run_id, {% end %}
+        model,
+        learning_enabled,
+        min(timestamp) AS first_episode_at,
+        count() AS episodes,
+        countIf(success) AS successes,
+        round(successes / episodes, 4) AS success_rate,
+        round(avg(steps), 2) AS avg_steps
+    FROM episode_results
+    WHERE
+        1 = 1
+        {% if defined(run_id) %}
+            AND run_id = {{ String(run_id, description="Only this run (agent.py RUN_ID)") }}
+        {% end %}
+        {% if defined(model) %} AND model = {{ String(model, description="Only this model") }} {% end %}
+        {% if defined(learning_enabled) %}
+            AND learning_enabled = {{ Boolean(learning_enabled) }}
+        {% end %}
+        {% if defined(since) %}
+            AND timestamp
+            >= {{ DateTime(since, description="Inclusive lower bound, YYYY-MM-DD HH:MM:SS (UTC)") }}
+        {% end %}
+        {% if defined(until) %}
+            AND timestamp
+            < {{ DateTime(until, description="Exclusive upper bound, YYYY-MM-DD HH:MM:SS (UTC)") }}
+        {% end %}
+    GROUP BY {% if Boolean(by_run, True) %} run_id, {% end %} model, learning_enabled
+    ORDER BY first_episode_at
+
+TYPE ENDPOINT

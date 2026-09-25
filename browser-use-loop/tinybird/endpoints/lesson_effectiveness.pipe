@@ -1,0 +1,82 @@
+DESCRIPTION >
+    Per lesson: outcomes of episodes whose prompt showed it vs. episodes (in the same filter) that did not.
+    This is a correlation, not a causal effect: lessons accumulate over time, so "without" episodes skew
+    earlier, and a lesson's presence can track other changes. Filter to comparable episodes (e.g.
+    learning_enabled=1 and a since/until window) and read deltas together with episodes_with.
+    Filters: run_id, model, learning_enabled (1 = --learn runs, 0 = without), since, until, min_episodes (default 3).
+
+TOKEN "agent_analytics_read" READ
+
+NODE filtered_episodes
+SQL >
+    %
+    SELECT success, steps, active_lesson_ids
+    FROM episode_results
+    WHERE
+        1 = 1
+        {% if defined(run_id) %}
+            AND run_id = {{ String(run_id, description="Only this run (agent.py RUN_ID)") }}
+        {% end %}
+        {% if defined(model) %} AND model = {{ String(model, description="Only this model") }} {% end %}
+        {% if defined(learning_enabled) %}
+            AND learning_enabled = {{ Boolean(learning_enabled) }}
+        {% end %}
+        {% if defined(since) %}
+            AND timestamp
+            >= {{ DateTime(since, description="Inclusive lower bound, YYYY-MM-DD HH:MM:SS (UTC)") }}
+        {% end %}
+        {% if defined(until) %}
+            AND timestamp
+            < {{ DateTime(until, description="Exclusive upper bound, YYYY-MM-DD HH:MM:SS (UTC)") }}
+        {% end %}
+
+NODE lesson_texts
+SQL >
+    SELECT lesson_id, any (lesson) AS lesson
+    FROM agent_episodes ARRAY
+    JOIN active_lesson_ids AS lesson_id, active_lessons AS lesson
+    GROUP BY lesson_id
+
+NODE per_lesson
+SQL >
+    SELECT
+        lesson_id,
+        count() AS episodes_with,
+        countIf(success) AS successes_with,
+        sum(steps) AS steps_with
+    FROM filtered_episodes ARRAY
+    JOIN arrayDistinct(active_lesson_ids) AS lesson_id
+    GROUP BY lesson_id
+
+NODE effectiveness
+SQL >
+    %
+    SELECT
+        p.lesson_id AS lesson_id,
+        t.lesson AS lesson,
+        p.episodes_with AS episodes_with,
+        round(p.successes_with / p.episodes_with, 4) AS success_rate_with,
+        total.episodes - p.episodes_with AS episodes_without,
+        round(
+            (total.successes - p.successes_with) / nullIf(episodes_without, 0), 4
+        ) AS success_rate_without,
+        round(
+            p.successes_with / p.episodes_with
+            - (total.successes - p.successes_with) / nullIf(episodes_without, 0),
+            4
+        ) AS success_rate_delta,
+        round(p.steps_with / p.episodes_with, 2) AS avg_steps_with,
+        round((total.steps - p.steps_with) / nullIf(episodes_without, 0), 2) AS avg_steps_without
+    FROM per_lesson AS p
+    CROSS JOIN
+        (
+            SELECT count() AS episodes, countIf(success) AS successes, sum(steps) AS steps
+            FROM filtered_episodes
+        ) AS total
+    LEFT JOIN lesson_texts AS t ON t.lesson_id = p.lesson_id
+    WHERE
+        p.episodes_with
+        >= {{ Int32(min_episodes, 3, description="Hide lessons seen in fewer episodes") }}
+    ORDER BY success_rate_delta DESC, episodes_with DESC
+
+TYPE ENDPOINT

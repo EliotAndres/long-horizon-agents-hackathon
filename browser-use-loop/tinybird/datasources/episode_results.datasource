@@ -1,0 +1,28 @@
+DESCRIPTION >
+    One row per finished episode (event `episode_result`). `success` = reward > 0.
+    `lesson_count` is the size of lesson memory at episode start; `active_lesson_ids` are the lessons
+    the episode's prompt showed (the lesson-effectiveness endpoint joins on them).
+
+TOKEN "agent_telemetry_append" APPEND
+
+SCHEMA >
+    `timestamp` DateTime64(3) `json:$.timestamp`,
+    `event_id` String `json:$.event_id`,
+    `run_id` String `json:$.run_id`,
+    `model` LowCardinality(String) `json:$.model`,
+    `learning_enabled` Bool `json:$.learning_enabled`,
+    `episode_id` String `json:$.episode_id`,
+    `episode_index` UInt32 `json:$.episode_index`,
+    `seed` Int64 `json:$.seed`,
+    `task` String `json:$.task`,
+    `reward` Float32 `json:$.reward`,
+    `success` Bool `json:$.success`,
+    `steps` UInt16 `json:$.steps`,
+    `no_change_steps` UInt16 `json:$.no_change_steps`,
+    `duration_ms` UInt64 `json:$.duration_ms`,
+    `lesson_count` UInt32 `json:$.lesson_count`,
+    `active_lesson_ids` Array(String) `json:$.active_lesson_ids[:]`
+
+ENGINE MergeTree
+ENGINE_PARTITION_KEY toYYYYMM(timestamp)
+ENGINE_SORTING_KEY run_id, episode_index

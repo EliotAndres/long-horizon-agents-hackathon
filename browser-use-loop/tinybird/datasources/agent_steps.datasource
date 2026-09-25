@@ -1,0 +1,36 @@
+DESCRIPTION >
+    One row per agent step (event `agent_step`): what the model saw and decided, and what happened.
+    `executed` is false when grounding found no click target. `screen_changed` mirrors the local
+    trajectory's `changed` flag (false = the action ran but the screen did not change).
+    Screenshots stay on the agent's machine: only their relative path, sha256 and size are stored.
+
+TOKEN "agent_telemetry_append" APPEND
+
+SCHEMA >
+    `timestamp` DateTime64(3) `json:$.timestamp`,
+    `event_id` String `json:$.event_id`,
+    `run_id` String `json:$.run_id`,
+    `model` LowCardinality(String) `json:$.model`,
+    `learning_enabled` Bool `json:$.learning_enabled`,
+    `episode_id` String `json:$.episode_id`,
+    `episode_index` UInt32 `json:$.episode_index`,
+    `seed` Int64 `json:$.seed`,
+    `step_index` UInt16 `json:$.step_index`,
+    `task` String `json:$.task`,
+    `model_state` String `json:$.model_state`,
+    `action_type` LowCardinality(String) `json:$.action_type`,
+    `action_arg` String `json:$.action_arg`,
+    `action_result` String `json:$.action_result`,
+    `executed` Bool `json:$.executed`,
+    `screen_changed` Bool `json:$.screen_changed`,
+    `done` Bool `json:$.done`,
+    `step_latency_ms` Float64 `json:$.step_latency_ms`,
+    `lesson_count` UInt32 `json:$.lesson_count`,
+    `screenshot_path` String `json:$.screenshot_path`,
+    `screenshot_sha256` String `json:$.screenshot_sha256`,
+    `screenshot_width` UInt16 `json:$.screenshot_width`,
+    `screenshot_height` UInt16 `json:$.screenshot_height`
+
+ENGINE MergeTree
+ENGINE_PARTITION_KEY toYYYYMM(timestamp)
+ENGINE_SORTING_KEY run_id, episode_id, step_index
