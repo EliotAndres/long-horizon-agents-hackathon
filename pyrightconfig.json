@@ -1,0 +1,6 @@
+{
+  "venvPath": "backend",
+  "venv": ".venv",
+  "executionEnvironments": [{ "root": "backend" }],
+  "exclude": ["frontend", "data", "**/node_modules", "**/.venv"]
+}

@@ -1,0 +1,32 @@
+DESCRIPTION >
+    Watch templates `arrival_after` / `availability_changed`: latest state of the flight the agent
+    booked, with violation flags computed against the user's hard constraints.
+
+NODE latest
+SQL >
+    %
+    SELECT
+        flight_id,
+        argMax(departure, seq) AS departure,
+        argMax(arrival, seq) AS arrival,
+        argMax(departure_min, seq) AS departure_min,
+        argMax(arrival_min, seq) AS arrival_min,
+        argMax(price, seq) AS price,
+        argMax(available, seq) AS available,
+        max(seq) AS last_seq
+    FROM market_observations
+    WHERE run_id = {{String(run_id, required=True)}}
+      AND flight_id = {{String(flight_id, required=True)}}
+    GROUP BY flight_id
+
+NODE endpoint
+SQL >
+    %
+    SELECT
+        *,
+        toUInt8(arrival_min > {{Int32(arrival_before_min, 540)}}) AS arrival_violated,
+        toUInt8(departure_min < {{Int32(departure_after_min, 300)}}) AS departure_violated,
+        toUInt8(available = 0) AS unavailable
+    FROM latest
+
+TYPE ENDPOINT

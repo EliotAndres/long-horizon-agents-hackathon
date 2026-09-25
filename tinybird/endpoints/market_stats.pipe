@@ -1,0 +1,15 @@
+DESCRIPTION >
+    How much of the world the agent slept through: observations and price changes per run.
+
+NODE endpoint
+SQL >
+    %
+    SELECT
+        count() AS observations,
+        uniqExact(flight_id) AS flights,
+        min(observed_at) AS first_observed_at,
+        max(observed_at) AS last_observed_at
+    FROM market_observations
+    WHERE run_id = {{String(run_id, required=True)}}
+
+TYPE ENDPOINT

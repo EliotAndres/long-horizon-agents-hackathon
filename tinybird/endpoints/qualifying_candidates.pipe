@@ -1,0 +1,44 @@
+DESCRIPTION >
+    Watch template `price_below` / `better_candidate`: latest state of every flight that satisfies
+    the user's hard constraints right now. A non-empty result means the condition fired.
+
+NODE latest
+SQL >
+    %
+    SELECT
+        flight_id,
+        any(carrier) AS carrier,
+        any(origin) AS origin,
+        any(destination) AS destination,
+        argMax(departure, seq) AS departure,
+        argMax(arrival, seq) AS arrival,
+        argMax(departure_min, seq) AS departure_min,
+        argMax(arrival_min, seq) AS arrival_min,
+        argMax(price, seq) AS price,
+        argMax(stops, seq) AS stops,
+        argMax(available, seq) AS available,
+        argMax(source, seq) AS source,
+        argMax(source_url, seq) AS source_url,
+        max(observed_at) AS observed_at,
+        max(seq) AS last_seq,
+        count() AS observations
+    FROM market_observations
+    WHERE run_id = {{String(run_id, required=True)}}
+      AND travel_date = {{String(travel_date, required=True)}}
+    GROUP BY flight_id
+
+NODE endpoint
+SQL >
+    %
+    SELECT *
+    FROM latest
+    WHERE available = 1
+      AND destination = {{String(destination, 'LAX')}}
+      AND origin IN {{Array(origins, 'String', default='SFO,OAK')}}
+      AND price <= {{Float32(max_price, 180)}}
+      AND arrival_min <= {{Int32(arrival_before_min, 540)}}
+      AND departure_min >= {{Int32(departure_after_min, 300)}}
+      {% if defined(exclude_flight) %} AND flight_id != {{String(exclude_flight)}} {% end %}
+    ORDER BY price ASC, arrival_min ASC
+
+TYPE ENDPOINT

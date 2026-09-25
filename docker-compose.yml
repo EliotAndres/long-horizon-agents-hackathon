@@ -1,0 +1,64 @@
+name: horizonbook
+
+services:
+  # Tinybird Local: the real Tinybird engine (Events API + endpoint pipes) running on this machine.
+  # Set TINYBIRD_HOST/TINYBIRD_TOKEN in .env to use Tinybird Cloud instead.
+  tinybird-local:
+    image: tinybirdco/tinybird-local:latest
+    platform: linux/amd64
+    ports: ["7181:7181"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:7181/tokens >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+
+  # One-shot: deploys /tinybird (datasource + condition endpoints) with the Tinybird Forward CLI.
+  tinybird-deploy:
+    build: ./tinybird
+    depends_on:
+      tinybird-local: { condition: service_healthy }
+    environment:
+      TINYBIRD_HOST: ${TINYBIRD_HOST:-http://tinybird-local:7181}
+      TINYBIRD_TOKEN: ${TINYBIRD_TOKEN:-}
+    restart: "no"
+
+  # Liquid AI LFM2.5 served by llama.cpp with an OpenAI-compatible API and JSON-schema constrained output.
+  liquid:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    command: >
+      -hf ${LIQUID_HF_REPO:-LiquidAI/LFM2.5-1.2B-Instruct-GGUF:Q8_0}
+      --alias ${LIQUID_MODEL:-LFM2.5-1.2B-Instruct} --host 0.0.0.0 --port 8081 --ctx-size 8192 --parallel 2 --jinja
+    ports: ["8081:8081"]
+    volumes: ["llama-cache:/root/.cache/llama.cpp"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8081/health >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 120
+
+  backend:
+    build: ./backend
+    env_file: [{ path: .env, required: false }]
+    environment:
+      HB_DB_PATH: /data/horizonbook.db
+      HB_REPLAY_DIR: /data/replay
+      TINYBIRD_HOST: ${TINYBIRD_HOST:-http://tinybird-local:7181}
+      LIQUID_BASE_URL: ${LIQUID_BASE_URL:-http://liquid:8081/v1}
+      LIQUID_MODEL: ${LIQUID_MODEL:-LFM2.5-1.2B-Instruct}
+      SANDBOX_URL: http://localhost:8000
+    volumes: ["./data:/data"]
+    ports: ["8000:8000"]
+    depends_on:
+      tinybird-deploy: { condition: service_completed_successfully }
+      liquid: { condition: service_healthy }
+
+  frontend:
+    build: ./frontend
+    environment:
+      BACKEND_URL: http://backend:8000
+    ports: ["5173:5173"]
+    depends_on: [backend]
+
+volumes:
+  llama-cache:

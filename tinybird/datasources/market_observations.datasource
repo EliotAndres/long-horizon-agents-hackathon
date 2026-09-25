@@ -1,0 +1,28 @@
+DESCRIPTION >
+    Every observation of the flight market HorizonBook watches: one row per (flight, moment).
+    Written by the market observer (simulator + Nimble-verified sources). The agent never polls
+    this table with an LLM; the condition endpoints below decide when it must wake up.
+
+SCHEMA >
+    `run_id` String `json:$.run_id`,
+    `seq` UInt64 `json:$.seq`,
+    `observed_at` DateTime64(3) `json:$.observed_at`,
+    `flight_id` String `json:$.flight_id`,
+    `carrier` String `json:$.carrier`,
+    `origin` String `json:$.origin`,
+    `destination` String `json:$.destination`,
+    `travel_date` String `json:$.travel_date`,
+    `departure` String `json:$.departure`,
+    `arrival` String `json:$.arrival`,
+    `departure_min` Int32 `json:$.departure_min`,
+    `arrival_min` Int32 `json:$.arrival_min`,
+    `price` Float32 `json:$.price`,
+    `currency` String `json:$.currency`,
+    `stops` UInt8 `json:$.stops`,
+    `available` UInt8 `json:$.available`,
+    `source` String `json:$.source`,
+    `source_url` String `json:$.source_url`
+
+ENGINE "MergeTree"
+ENGINE_PARTITION_KEY "travel_date"
+ENGINE_SORTING_KEY "run_id, flight_id, seq"
