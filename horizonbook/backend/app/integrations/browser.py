@@ -88,29 +88,40 @@ def _proxy() -> dict | None:
 class Browser:
     """One local Chromium tab we drive step by step."""
 
-    def __init__(self, headless: bool = True, proxy: dict | None = None):
-        self.headless, self.proxy = headless, proxy if proxy is not None else _proxy()
+    def __init__(self, headless: bool = True, proxy: dict | None = None, profile: Path | None = None):
+        """profile: keep cookies (e.g. a solved captcha) in this folder between sessions."""
+        self.headless, self.proxy, self.profile = headless, proxy if proxy is not None else _proxy(), profile
         self._pw = self._browser = self.context = self.page = None
         self.status: int | None = None
 
     def __enter__(self) -> "Browser":
-        from playwright.sync_api import sync_playwright
+        if os.environ.get("HORIZON_PATCHRIGHT"):  # Playwright with the CDP leaks bot walls look for patched out
+            from patchright.sync_api import sync_playwright
+        else:
+            from playwright.sync_api import sync_playwright
         self._pw = sync_playwright().start()
         # channel="chromium": full Chromium in new headless mode (looks like real Chrome to bot checks,
-        # unlike the separate headless-shell build).
-        self._browser = self._pw.chromium.launch(
-            channel="chromium", headless=self.headless, proxy=self.proxy,
-            args=["--disable-blink-features=AutomationControlled"])
-        ctx = self._browser.new_context(user_agent=UA, locale="en-US", timezone_id="America/Los_Angeles",
-                                        viewport={"width": 1366, "height": 900})
+        # unlike the separate headless-shell build). No --enable-automation: it flags the browser as driven.
+        launch = {"channel": "chromium", "headless": self.headless, "proxy": self.proxy,
+                  "args": ["--disable-blink-features=AutomationControlled"], "ignore_default_args": ["--enable-automation"]}
+        # A visible window keeps its real user agent: a spoofed one that disagrees with the browser is a bot signal.
+        page_opts = {"locale": "en-US", "timezone_id": "America/Los_Angeles",
+                     **({"user_agent": UA, "viewport": {"width": 1366, "height": 900}} if self.headless else {"no_viewport": True})}
+        if self.profile:
+            ctx = self._pw.chromium.launch_persistent_context(str(self.profile), **launch, **page_opts)
+        else:
+            self._browser = self._pw.chromium.launch(**launch)
+            ctx = self._browser.new_context(**page_opts)
         ctx.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         self.context = ctx
-        self.page = ctx.new_page()
+        self.page = ctx.pages[0] if ctx.pages else ctx.new_page()
         return self
 
     def __exit__(self, *exc) -> None:
-        if self._browser:
-            self._browser.close()
+        try:
+            (self._browser or self.context).close()
+        except Exception:
+            pass  # the person already closed the window
         if self._pw:
             self._pw.stop()
 

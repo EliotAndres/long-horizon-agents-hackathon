@@ -1,0 +1,3 @@
+playwright>=1.55
+pillow>=11  # browser-use-loop/telemetry.py (Tinybird) imports it
+patchright>=1.55  # optional, HORIZON_PATCHRIGHT=1: harder for bot walls to detect

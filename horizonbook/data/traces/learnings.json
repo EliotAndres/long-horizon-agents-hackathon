@@ -1,0 +1,61 @@
+{
+ "episodes": 1,
+ "success_rate": 0.0,
+ "avg_steps": {
+  "success": null,
+  "fail": 18.0
+ },
+ "runs": {
+  "20260925-144306": "0/1"
+ },
+ "playbook": [],
+ "wasted_clicks": [
+  {
+   "target": "h2",
+   "clicks": 6,
+   "wasted": 5,
+   "rate": 0.83
+  },
+  {
+   "target": "p",
+   "clicks": 3,
+   "wasted": 2,
+   "rate": 0.67
+  }
+ ],
+ "mistakes": {
+  "type_without_focus": {
+   "count": 0,
+   "episodes": 0,
+   "success_rate": null
+  },
+  "type_read_only": {
+   "count": 0,
+   "episodes": 0,
+   "success_rate": null
+  },
+  "not_found": {
+   "count": 0,
+   "episodes": 0,
+   "success_rate": null
+  },
+  "repeated_dead_action": {
+   "count": 7,
+   "episodes": 1,
+   "success_rate": 0.0
+  },
+  "scroll_after_not_found_helped": {
+   "count": 0,
+   "episodes": 0,
+   "success_rate": null
+  }
+ },
+ "lessons": [
+  {
+   "lesson": "If an action did not change the screen, do not repeat it; try a different element or scroll.",
+   "from": "repeated_dead_action",
+   "evidence": "7x in 1/1 episodes, those episodes succeeded 0%"
+  }
+ ],
+ "lesson_scores": []
+}
