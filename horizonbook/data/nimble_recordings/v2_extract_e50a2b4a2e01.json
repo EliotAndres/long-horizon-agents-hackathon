@@ -1,0 +1,29 @@
+{
+  "endpoint": "/v2/extract",
+  "request": {
+    "url": "https://html.duckduckgo.com/html/?q=SFO+to+JFK+on+2026-10-12",
+    "render": true,
+    "formats": [
+      "markdown"
+    ],
+    "country": "US"
+  },
+  "recorded_at": "2026-09-25T20:43:08+00:00",
+  "response": {
+    "url": "https://html.duckduckgo.com/html/?q=SFO+to+JFK+on+2026-10-12",
+    "task_id": "edecc6c7-b18a-436e-9fab-1a7dffcf19f2",
+    "status": "success",
+    "data": {
+      "markdown": "[DuckDuckGo](https://html.duckduckgo.com/html/)\n\nUnfortunately, bots use DuckDuckGo too.\n\nPlease complete the following challenge to confirm this search was made by a human.\n\nSelect all squares containing a duck:\n\n ![ ](https://html.duckduckgo.com/assets/anomaly/images/challenge/d9911e6988e57da3a85d21f61f591fe1.jpg)\n\n ![ ](https://html.duckduckgo.com/assets/anomaly/images/challenge/3a6630c654b55d766a6ce3ab6149e994.jpg)\n\n ![ ](https://html.duckduckgo.com/assets/anomaly/images/challenge/c20fc41639237f82c350be468a0a9cc5.jpg)\n\n ![ ](https://html.duckduckgo.com/assets/anomaly/images/challenge/ff23e26e42dcc1a2daf2da16f6d8a1f7.jpg)\n\n ![ ](https://html.duckduckgo.com/assets/anomaly/images/challenge/758553b2a85561dd257db64bcba099e7.jpg)\n\n ![ ](https://html.duckduckgo.com/assets/anomaly/images/challenge/e64d7f539d3864ff882a3e67350e9060.jpg)\n\n ![ ](https://html.duckduckgo.com/assets/anomaly/images/challenge/14c1dcd222ba8a63b38f8f32454ab597.jpg)\n\n ![ ](https://html.duckduckgo.com/assets/anomaly/images/challenge/5a6c586aa029c5aa74825d5dc0c029e3.jpg)\n\n ![ ](https://html.duckduckgo.com/assets/anomaly/images/challenge/da7199883448e1ba1146d0e6574eeb84.jpg)\n\nSubmit\n\n Images not loading?\n\nPlease email the following code to:\n\nerror-lite+1bbb@duckduckgo.com\n\nCode: 1bbb\n\n![](https://duckduckgo.com/t/tqadb?7721019&s=lite&r=use&gk=d4cd0dabcf4caa22ad92fab40844c786&c=dadb&iadb=0&p=d9911e6988e57da3a85d21f61f591fe1-3a6630c654b55d766a6ce3ab6149e994-c20fc41639237f82c350be468a0a9cc5-ff23e26e42dcc1a2daf2da16f6d8a1f7-758553b2a85561dd257db64bcba099e7-e64d7f539d3864ff882a3e67350e9060-14c1dcd222ba8a63b38f8f32454ab597-5a6c586aa029c5aa74825d5dc0c029e3-da7199883448e1ba1146d0e6574eeb84&cc=sre&sc=1&i=-1&o=R%2BH4BS3Q%2BYnC8IUpNYpg0NKlCkCXH9CIWUaDK4iIpFKRsjjsDjWfSgd7EXxcr2fl%0A&e=0)"
+    },
+    "metadata": {
+      "query_time": "2026-09-25T20:42:42.441Z",
+      "query_duration": 24652,
+      "response_parameters": {
+        "input_url": "https://html.duckduckgo.com/html/?q=SFO+to+JFK+on+2026-10-12"
+      },
+      "driver": "vx8"
+    },
+    "status_code": 202
+  }
+}

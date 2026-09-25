@@ -1,0 +1,33 @@
+{
+  "endpoint": "/v2/extract",
+  "request": {
+    "url": "https://www.opentable.com/cuisine/best-italian-restaurants-san-francisco-bay-area-ca",
+    "render": true,
+    "formats": [
+      "markdown"
+    ],
+    "country": "US",
+    "driver": "vx10"
+  },
+  "recorded_at": "2026-09-25T19:49:22+00:00",
+  "response": {
+    "url": "https://www.opentable.com/cuisine/best-italian-restaurants-san-francisco-bay-area-ca",
+    "task_id": "a21a3b09-2f3b-4558-bd63-c855174e5105",
+    "status": "success",
+    "data": {
+      "markdown": "**Enable JavaScript to run this app.**\n\n[Skip to main content](https://www.opentable.com/cuisine/best-italian-restaurants-san-francisco-bay-area-ca#0)\n\nMobile\n\nFor BusinessesFAQs\n\nEN\n\n[![OpenTable logo](https://www.opentable.com/static/cfe/15/images/opentable-logo-ZGYRVF2L.svg)](https://www.opentable.com/)\n\n# Best Italian Restaurants in undefined\n\nFind a table\n\nMap\n\n##### Price\n\n*   $$\n\n    $30 and under\n\n*   $$$\n\n    $31 to $50\n\n*   $$$$\n\n    $50 and over\n\n##### Dining Options\n\nAll dining options\n\nDelivery only\n\nTakeout only\n\nFilter\n\n## No restaurants found in this area\n\nTry changing your filters.\n\nClear filters\n\n## Explore OpenTable\n\n1.  Neighborhood\n2.  Cuisine Nearby\n\n*   https://www.opentable.com/start/geo/?n=2849\n\n*   [Italian](https://www.opentable.com/nearme/italian-restaurants-near-me)\n\nDiscover\n\n*   Dining Rewards\n\n*   [Private Dining](https://www.opentable.com/private-dining)\n*   [OpenTable Icons](https://www.opentable.com/icons)\n*   [Top 100 Restaurants](https://www.opentable.com/c/top-restaurants/)\n*   Reserve for Others\n\n*   [Restaurants Near Me](https://www.opentable.com/nearby)\n*   [Restaurants Open Now](https://www.opentable.com/open)\n\nOpenTable\n\n*   About Us\n\n*   Blog\n\n*   Careers\n\n*   Press\n\nMore\n\n*   [OpenTable for iOS](https://app.adjust.com/gh97ibu?redirect=https://itunes.apple.com/app/id296581815?mt=8)\n*   [OpenTable for Android](https://app.adjust.com/dk33pts?redirect=https://play.google.com/store/apps/details?id=com.opentable)\n*   Affiliate Program\n\n*   Contact Us\n\nOur sites\n\n*   [OpenTable.jp](https://www.opentable.jp/)\n*   [OpenTable.de](https://www.opentable.de/)\n*   [OpenTable.es](https://www.opentable.es/)\n*   [OpenTable.ca](https://www.opentable.ca/)\n*   [OpenTable.hk](https://www.opentable.hk/)\n*   [OpenTable.ie](https://www.opentable.ie/)\n*   [OpenTable.sg](https://www.opentable.sg/)\n*   [OpenTable.nl](https://www.opentable.nl/)\n*   [OpenTable.com.mx](https://www.opentable.com.mx/)\n*   [OpenTable.co.uk](https://www.opentable.co.uk/)\n*   [OpenTable.com.au](https://www.opentable.com.au/)\n*   [OpenTable.ae](https://www.opentable.ae/)\n*   [OpenTable.co.th](https://www.opentable.co.th/)\n*   [OpenTable.it](https://www.opentable.it/)\n*   [OpenTable.com.tw](https://www.opentable.com.tw/)\n*   [OpenTable.fr](https://www.opentable.fr/)\n\nBusinesses\n\n*   Restaurant Management Solutions\n\n*   Restaurant Reservation Software\n\n*   Restaurant Marketing Software\n\n*   Restaurant Event Software\n\n*   OpenTable For Restaurants\n\n*   OpenTable For Restaurant Groups\n\n*   Restaurant Resources\n\n*   OpenTable Pricing & Plans\n\nJoin us on\n\n![Twitter](https://www.opentable.com/static/cfe/15/images/ic_photos-DSAVRTDM.svg)\n\n![Facebook](https://www.opentable.com/static/cfe/15/images/ic_photos-DSAVRTDM.svg)\n\n![Linkedin](https://www.opentable.com/static/cfe/15/images/ic_photos-DSAVRTDM.svg)\n\n![Instagram](https://www.opentable.com/static/cfe/15/images/ic_photos-DSAVRTDM.svg)\n\n![YouTube](https://www.opentable.com/static/cfe/15/images/ic_photos-DSAVRTDM.svg)\n\n![TikTok](https://www.opentable.com/static/cfe/15/images/ic_photos-DSAVRTDM.svg)\n\n*   Privacy Policy\n\n*   Terms of Use\n\n*   Cookies and Interest-Based Ads\n\n*   Do Not Sell or Share My Personal Information\n\n*   Accessibility Statement\n\n*   Cookie Preferences\n\nCopyright \u00a9 2026 OpenTable, Inc. 425 Market St Ste 1200, San Francisco CA 94105 - All rights reserved.\n\nOpenTable is part of Booking Holdings, the world leader in online travel and related services.\n\n![Booking Logo](https://www.opentable.com/static/cfe/15/images/ic_photos-DSAVRTDM.svg)\n\n![Priceline Logo](https://www.opentable.com/static/cfe/15/images/ic_photos-DSAVRTDM.svg)\n\n![KAYAK Logo](https://www.opentable.com/static/cfe/15/images/ic_photos-DSAVRTDM.svg)\n\n![Agoda Logo](https://www.opentable.com/static/cfe/15/images/ic_photos-DSAVRTDM.svg)\n\n![OpenTable Logo](https://www.opentable.com/static/cfe/15/images/ic_photos-DSAVRTDM.svg)"
+    },
+    "metadata": {
+      "query_time": "2026-09-25T19:48:25.374Z",
+      "query_duration": 57122,
+      "response_parameters": {
+        "input_url": "https://www.opentable.com/cuisine/best-italian-restaurants-san-francisco-bay-area-ca"
+      },
+      "driver": "vx10"
+    },
+    "status_code": 200,
+    "warnings": [
+      "render is ignored because driver is configured"
+    ]
+  }
+}

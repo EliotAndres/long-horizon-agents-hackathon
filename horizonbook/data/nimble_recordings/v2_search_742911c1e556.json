@@ -1,0 +1,83 @@
+{
+  "endpoint": "/v2/search",
+  "request": {
+    "query": "dermatologist appointment San Francisco",
+    "max_results": 5,
+    "search_depth": "lite",
+    "focus": "general",
+    "country": "US",
+    "include_domains": [
+      "zocdoc.com",
+      "onemedical.com",
+      "healthgrades.com",
+      "solv.health"
+    ]
+  },
+  "recorded_at": "2026-09-25T19:50:03+00:00",
+  "response": {
+    "total_results": 5,
+    "results": [
+      {
+        "title": "Best Dermatologists Near Me in San Francisco, CA | Zocdoc",
+        "description": "Find best Dermatologists in San Francisco, California & make an appointment online instantly! Zocdoc helps you find Dermatologists in San Francisco and other locations with verified patient reviews and appointment availability that accept your insurance. All appointment times are guaranteed by our San Francisco Dermatologists. It's free!",
+        "url": "https://www.zocdoc.com/dermatologists/san-francisco-6785pm",
+        "content": "",
+        "metadata": {
+          "position": 1,
+          "entity_type": "OrganicResult",
+          "country": "US",
+          "locale": "en"
+        }
+      },
+      {
+        "title": "20 Best Dermatologists Near San Francisco, CA - Healthgrades",
+        "description": "A Dermatologist's office in San Francisco, CA may offer a variety of resources for patients who need care or medical advice between appointments. These may include an answering service, nurse or physician assistant helpline, or text support through a patient portal.",
+        "url": "https://www.healthgrades.com/dermatology-directory/ca-california/san-francisco",
+        "content": "",
+        "metadata": {
+          "position": 2,
+          "entity_type": "OrganicResult",
+          "country": "US",
+          "locale": "en"
+        }
+      },
+      {
+        "title": "Dr. Alice Do, DO - Dermatologist in San Francisco, CA | Healthgrades",
+        "description": "Dr. Alice Do, DO is a board-certified dermatologist in San Francisco, CA and has over 20 years of experience in the medical field. She is affiliated with medical facilities such as Mills-Peninsula Medical Center and UCSF Helen Diller Medical Center at Parnassus Heights. She is accepting new patients and telehealth appointments.",
+        "url": "https://www.healthgrades.com/physician/dr-alice-do-yb7sh",
+        "content": "",
+        "metadata": {
+          "position": 3,
+          "entity_type": "OrganicResult",
+          "country": "US",
+          "locale": "en"
+        }
+      },
+      {
+        "title": "Best Blue Cross Blue Shield Dermatologists Near Me in San Francisco, CA ...",
+        "description": "Zocdoc helps you find Dermatologists in San Francisco and other locations with verified patient reviews and appointment availability that accept Blue Cross Blue Shield and other insurances. All appointment times are guaranteed by our San Francisco Dermatologists. It's free!",
+        "url": "https://www.zocdoc.com/dermatologists/san-francisco-6785pm/blue-cross-blue-shield-304m",
+        "content": "",
+        "metadata": {
+          "position": 4,
+          "entity_type": "OrganicResult",
+          "country": "US",
+          "locale": "en"
+        }
+      },
+      {
+        "title": "Best UnitedHealthcare Dermatologists Near Me in San Francisco, CA - Zocdoc",
+        "description": "Find UnitedHealthcare Dermatologists in San Francisco, California & make an appointment online instantly! Zocdoc helps you find Dermatologists in San Francisco and other locations with verified patient reviews and appointment availability that accept UnitedHealthcare and other insurances.",
+        "url": "https://www.zocdoc.com/dermatologists/san-francisco-6785pm/unitedhealthcare-323m",
+        "content": "",
+        "metadata": {
+          "position": 5,
+          "entity_type": "OrganicResult",
+          "country": "US",
+          "locale": "en"
+        }
+      }
+    ],
+    "request_id": "123b5851-eef8-4f41-a2f7-ee67a08793c8"
+  }
+}

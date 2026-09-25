@@ -1,0 +1,77 @@
+{
+  "endpoint": "/v2/search",
+  "request": {
+    "query": "dermatologist appointment San Francisco",
+    "max_results": 5,
+    "search_depth": "lite",
+    "focus": "general",
+    "country": "US"
+  },
+  "recorded_at": "2026-09-25T19:43:05+00:00",
+  "response": {
+    "total_results": 5,
+    "results": [
+      {
+        "title": "Best Dermatologists in San Francisco, CA (2026) | Top-Rated ... - WebMD",
+        "description": "Discover top Dermatologists in San Francisco, CA - View 409 providers with an average of 26 years experience and 1,774 reviews.",
+        "url": "https://doctor.webmd.com/providers/specialty/dermatology/california/san-francisco",
+        "content": "",
+        "metadata": {
+          "position": 1,
+          "entity_type": "OrganicResult",
+          "country": "US",
+          "locale": "en"
+        }
+      },
+      {
+        "title": "Best Dermatologists Near Me in San Francisco, CA | Zocdoc",
+        "description": "Find best Dermatologists in San Francisco, California & make an appointment online instantly! Zocdoc helps you find Dermatologists in San Francisco and other locations with verified patient reviews and appointment availability that accept your insurance. All appointment times are guaranteed by our San Francisco Dermatologists. It's free!",
+        "url": "https://www.zocdoc.com/dermatologists/san-francisco-6785pm",
+        "content": "",
+        "metadata": {
+          "position": 2,
+          "entity_type": "OrganicResult",
+          "country": "US",
+          "locale": "en"
+        }
+      },
+      {
+        "title": "Dermatology - UCSF Health",
+        "description": "Find expert dermatology care for all types of skin conditions, from psoriasis to skin cancer, at our locations throughout the Bay Area.",
+        "url": "https://www.ucsfhealth.org/care/services/dermatology",
+        "content": "",
+        "metadata": {
+          "position": 3,
+          "entity_type": "OrganicResult",
+          "country": "US",
+          "locale": "en"
+        }
+      },
+      {
+        "title": "THE BEST 10 DERMATOLOGISTS IN SAN FRANCISCO, CA - Yelp",
+        "description": "What are people saying about dermatologists in San Francisco, CA? This is a review for dermatologists in San Francisco, CA: \"I saw Dr Morss-Walton recently for Botox and an acne consultation. She was incredibly knowledgeable and thorough. She listened closely and I truly felt like she cared about my concerns. I've gone to my fair share of dermatologists and Med Spas and this was the best ...",
+        "url": "https://www.yelp.com/search?cflt=dermatology&find_loc=San+Francisco%2C+CA",
+        "content": "",
+        "metadata": {
+          "position": 4,
+          "entity_type": "OrganicResult",
+          "country": "US",
+          "locale": "en"
+        }
+      },
+      {
+        "title": "San Francisco - Golden State Dermatology",
+        "description": "Golden State Dermatology in San Francisco, Sutter St. At Golden State Dermatology, we've built our scheduling around your life, so exceptional care fits seamlessly into your busy day. Our experienced providers give every patient focused, one-on-one attention, whether you're addressing a medical skin concern or working toward a cosmetic goal.",
+        "url": "https://www.goldenstatedermatology.com/san-francisco/",
+        "content": "",
+        "metadata": {
+          "position": 5,
+          "entity_type": "OrganicResult",
+          "country": "US",
+          "locale": "en"
+        }
+      }
+    ],
+    "request_id": "54c69c89-b4ed-4e5a-afce-4b0b9b2169eb"
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "endpoint": "/v2/search",
+  "request": {
+    "query": "dinner reservation for 2 San Francisco italian",
+    "max_results": 5,
+    "search_depth": "lite",
+    "focus": "general",
+    "country": "US",
+    "include_domains": [
+      "opentable.com",
+      "resy.com",
+      "yelp.com",
+      "exploretock.com"
+    ]
+  },
+  "recorded_at": "2026-09-25T19:48:24+00:00",
+  "response": {
+    "total_results": 5,
+    "results": [
+      {
+        "title": "Best Italian Restaurants in San Francisco Bay Area",
+        "description": "Book now at Italian restaurants near me in San Francisco Bay Area on OpenTable. Explore reviews, menus &amp; photos and find the perfect spot for any occasion.",
+        "url": "https://www.opentable.com/cuisine/best-italian-restaurants-san-francisco-bay-area-ca",
+        "content": "",
+        "metadata": {
+          "position": 1,
+          "entity_type": "OrganicResult",
+          "country": "US",
+          "locale": "en"
+        }
+      },
+      {
+        "title": "Best restaurants in San Francisco: Italian spots to book now",
+        "description": "Explore the best restaurants in San Francisco for Italian dining, from MICHELIN Guide favorites to classic trattorias and modern pasta destinations.",
+        "url": "https://www.opentable.com/lists/best-italian-restaurants-san-francisco",
+        "content": "",
+        "metadata": {
+          "position": 2,
+          "entity_type": "OrganicResult",
+          "country": "US",
+          "locale": "en"
+        }
+      },
+      {
+        "title": "Restaurants and Restaurant Bookings | OpenTable",
+        "description": "Book online, read restaurant reviews from diners, and earn points towards free meals. OpenTable is a real-time online booking network for fine dining restaurants.",
+        "url": "https://secure.opentable.com/",
+        "content": "",
+        "metadata": {
+          "position": 3,
+          "entity_type": "OrganicResult",
+          "country": "US",
+          "locale": "en"
+        }
+      },
+      {
+        "title": "TOP 10 BEST Italian Dinner in San Francisco, CA - Yelp",
+        "description": "What are people saying about italian restaurants in San Francisco, CA? This is a review for italian restaurants in San Francisco, CA: \"I was super impressed with the staff when I tried this place for the first time last week! It ended up being a much longer meal than normal because we were yakking away (like 3 hours), but the staff seemed genuinely happy to have us happy there. Loved the ...",
+        "url": "https://www.yelp.com/search?find_desc=italian+dinner&find_loc=San+Francisco%2C+CA",
+        "content": "",
+        "metadata": {
+          "position": 4,
+          "entity_type": "OrganicResult",
+          "country": "US",
+          "locale": "en"
+        }
+      },
+      {
+        "title": "TOP 10 BEST Italian Dinner Restaurants in San Francisco, CA - Yelp",
+        "description": "Top 10 Best Italian Dinner Restaurants in San Francisco, CA - Last Updated July 2026 - Yelp - Roma Antica, Bottega, Bocconcino, Seven Hills, Bella Trattoria, Delfina, Sotto Mare, Firenze by Night Ristorante, Piccolo Forno, Original Joe's",
+        "url": "https://www.yelp.com/search?find_desc=Italian+Dinner+Restaurants&find_loc=San+Francisco%2C+CA",
+        "content": "",
+        "metadata": {
+          "position": 5,
+          "entity_type": "OrganicResult",
+          "country": "US",
+          "locale": "en"
+        }
+      }
+    ],
+    "request_id": "2f06a06a-9a4e-469d-ac2c-96f3dab7fa15"
+  }
+}

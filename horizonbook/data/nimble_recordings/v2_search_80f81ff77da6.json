@@ -1,0 +1,84 @@
+{
+  "endpoint": "/v2/search",
+  "request": {
+    "query": "Oatly oat milk 64 oz",
+    "max_results": 5,
+    "search_depth": "lite",
+    "focus": "general",
+    "country": "US",
+    "include_domains": [
+      "instacart.com",
+      "amazon.com",
+      "walmart.com",
+      "target.com",
+      "safeway.com"
+    ]
+  },
+  "recorded_at": "2026-09-25T19:50:03+00:00",
+  "response": {
+    "total_results": 5,
+    "results": [
+      {
+        "title": "Oatly, Oatmilk, 64 fl oz, Plant-Based Vegan Dairy-Free Milk - Walmart.com",
+        "description": "Enjoy Oatly Original Oatmilk, made from 100% gluten-free oats enriched with calcium. Perfect for coffee, cereal, smoothies, or drinking straight from the carton.",
+        "url": "https://www.walmart.com/ip/Oatly-The-Original-Oat-Milk-Half-Gallon-64-fl-oz/911697164",
+        "content": "",
+        "metadata": {
+          "position": 1,
+          "entity_type": "OrganicResult",
+          "country": "US",
+          "locale": "en"
+        }
+      },
+      {
+        "title": "Amazon.com: Oatly Original Oat Milk, 64 oz | Plant-Based Made from Oats ...",
+        "description": "Your pick Oatly Oatly Original Oat Milk, 64 oz | Plant-Based Made from Oats, Milk Alternative, Vegan, Non-GMO, Gluten Free, Kosher 7K+ bought in past week Click to see price See all details",
+        "url": "https://www.amazon.com/clp/B075QJ8M1K",
+        "content": "",
+        "metadata": {
+          "position": 2,
+          "entity_type": "OrganicResult",
+          "country": "US",
+          "locale": "en"
+        }
+      },
+      {
+        "title": "Oatly Full Fat Oatmilk, Dairy-Free Milk, 64 fl oz Refrigerated Carton",
+        "description": "Oatly Full Fat Oatmilk that serves as a non-dairy alternative to regular milk Plant-based milk made from oats Perfect for coffee, cereal, smoothies, or drinking straight from the carton 100% cool for vegans Non-GMO, gluten-free, kosher-UDE",
+        "url": "https://www.walmart.com/ip/Oatly-Full-Fat-Oatmilk-Dairy-Free-Milk-64-fl-oz-Refrigerated-Carton/164081085",
+        "content": "",
+        "metadata": {
+          "position": 3,
+          "entity_type": "OrganicResult",
+          "country": "US",
+          "locale": "en"
+        }
+      },
+      {
+        "title": "Oatly Original Oatmilk Chilled Non-Dairy Milk - 64 fl oz - Target",
+        "description": "Read reviews and buy Oatly Original Oatmilk Chilled Non-Dairy Milk - 64 fl oz at Target. Choose from contactless Same Day Delivery, Drive Up and more.",
+        "url": "https://www.target.com/p/oatly-oatmilk-0-5gal/-/A-53328399",
+        "content": "",
+        "metadata": {
+          "position": 4,
+          "entity_type": "OrganicResult",
+          "country": "US",
+          "locale": "en"
+        }
+      },
+      {
+        "title": "Oatly Original Oat Milk (64 fl oz) Delivery or Pickup Near Me - Instacart",
+        "description": "Get Oatly Original Oat Milk delivered to you in as fast as 1 hour via Instacart or choose curbside or in-store pickup. Start shopping online now with Instacart to get your favorite products on-demand.",
+        "url": "https://www.instacart.com/products/60399664-oatly-original-oat-milk-64-fl-oz",
+        "content": "",
+        "metadata": {
+          "position": 5,
+          "entity_type": "OrganicResult",
+          "country": "US",
+          "locale": "en"
+        }
+      }
+    ],
+    "request_id": "46602117-d080-42a0-b773-1a9d62cfd28f"
+  }
+}
