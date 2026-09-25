@@ -2,6 +2,7 @@
 
     NIMBLE_API_KEY=... RAWTREE_API_KEY=... uv run main.py "Give me the cheapest flights from LA to SF on the 26th of September"
     uv run main.py "..." --url https://www.kayak.com      # skip step A
+    uv run main.py "..." --learn                          # use + update lessons in runs/lessons.json (learning.py)
 
 A: Nimble web search for the question; the local VLM picks which result to open.
 B: loop: B1 load page, B2 screenshot -> VLM -> action, B3 do it, B4 send the step trace to RawTree.
@@ -27,6 +28,8 @@ from mlx_vlm.structured import build_json_schema_logits_processor
 from PIL import Image, ImageChops, ImageDraw, ImageFont
 from playwright.sync_api import sync_playwright
 
+import learning
+
 MODEL = "LiquidAI/LFM2.5-VL-3B-MLX-8bit"
 VIEW = {"width": 1280, "height": 800}
 # headless Chromium says "HeadlessChrome" in its UA, which bot walls block on sight
@@ -34,6 +37,7 @@ UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML,
 RUN_ID = time.strftime("%Y%m%d-%H%M%S")
 FONT = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial.ttf", 20)
 BOLD = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial Bold.ttf", 22)
+MODEL_MS = {}  # model time per call kind (policy, grounding, popup_check, ...) since the last step, for --learn traces
 
 PICK_PROMPT = """Which search result is a website where you can search for flights and see prices for this request?
 
@@ -80,12 +84,14 @@ BBOX = {
 }
 
 
-def ask(model, processor, prompt, schema, img=None, max_tokens=250):
+def ask(model, processor, prompt, schema, img=None, max_tokens=250, kind="policy"):
     """One constrained-JSON call to the local VLM. No image = text-only question."""
+    t0 = time.time()
     images = [img] if img else []
     chat = apply_chat_template(processor, model.config, prompt, num_images=len(images))
     out = generate(model, processor, chat, image=images or None, max_tokens=max_tokens, temperature=0.0, verbose=False,
                    logits_processors=[build_json_schema_logits_processor(processor.tokenizer, schema)])
+    MODEL_MS[kind] = MODEL_MS.get(kind, 0) + round((time.time() - t0) * 1000)
     return json.loads(getattr(out, "text", out))
 
 
@@ -126,7 +132,7 @@ def pick_site(model, processor, task):
     print(f"search results:\n{listing}")
     schema = {"type": "object", "properties": {"pick": {"type": "integer", "minimum": 1, "maximum": len(results)}},
               "required": ["pick"]}
-    n = ask(model, processor, PICK_PROMPT.format(task=task, results=listing), schema, max_tokens=20)["pick"]
+    n = ask(model, processor, PICK_PROMPT.format(task=task, results=listing), schema, max_tokens=20, kind="site_pick")["pick"]
     trace("v4_site_picks", task=task, results=[u for _, u in results], pick=n, url=results[n - 1][1])
     return results[n - 1][1]
 
@@ -139,10 +145,10 @@ def proxy():
 def find_popup_close(model, processor, img):
     """Atomic check before each step: is a popup covering the page? -> where its close button (X) is, else None.
     The 3B model over-says "yes"; a real X comes back as a small box, a false alarm as empty or full-screen."""
-    if ask(model, processor, POPUP_PROMPT, POPUP, img, 20)["popup"] != "yes":
+    if ask(model, processor, POPUP_PROMPT, POPUP, img, 20, "popup_check")["popup"] != "yes":
         return None
     x1, y1, x2, y2 = ask(model, processor, "Detect the close button (X) of the popup. Output its bounding box as JSON.",
-                         BBOX, img, 60)["bbox"]
+                         BBOX, img, 60, "popup_check")["bbox"]
     if not (0 < x2 - x1 < 100 and 0 < y2 - y1 < 100):  # ponytail: a close button is <10% of the screen each way
         return None
     return (x1 + x2) / 2000 * VIEW["width"], (y1 + y2) / 2000 * VIEW["height"]
@@ -151,7 +157,8 @@ def find_popup_close(model, processor, img):
 def act(page, model, processor, img, kind, arg):
     """B3: run one action on the page, return a log line."""
     if kind == "click":
-        x1, y1, x2, y2 = ask(model, processor, f"Detect {arg}. Output its bounding box as JSON.", BBOX, img, 60)["bbox"]
+        x1, y1, x2, y2 = ask(model, processor, f"Detect {arg}. Output its bounding box as JSON.", BBOX, img, 60,
+                             "grounding")["bbox"]
         x, y = (x1 + x2) / 2000 * VIEW["width"], (y1 + y2) / 2000 * VIEW["height"]
         page.mouse.click(x, y)
         return f'click("{arg}") at ({x:.0f},{y:.0f})', (x, y)
@@ -207,34 +214,68 @@ def main():
     p.add_argument("task", nargs="?", default="Give me the cheapest flights from LA to SF on the 26th of September")
     p.add_argument("--url", help="skip the Nimble search and start here")
     p.add_argument("--max-steps", type=int, default=30)
+    p.add_argument("--learn", action="store_true", help="show lessons from runs/lessons.json to the policy, reflect after the run to update them")
     a = p.parse_args()
 
     out_dir = Path("runs") / RUN_ID
     out_dir.mkdir(parents=True, exist_ok=True)
+    lessons = learning.load() if a.learn else None
+    used = learning.active(lessons) if a.learn else None
+    learn = {"learning": True, "active_lesson_ids": [l["id"] for l in used]} if a.learn else {}
     model, processor = load(MODEL)
 
     url = a.url or pick_site(model, processor, a.task)
     print(f"task: {a.task}\nsite: {url}\nproxy: {'nimble' if proxy() else 'none'}")
-    trace("v4_runs", task=a.task, url=url, model=MODEL)
+    if a.learn:
+        print(f"lessons: using {len(used)} of {len(lessons)}", *(f"  - [{l['id']}] {l['text']}" for l in used), sep="\n")
+    trace("v4_runs", task=a.task, url=url, model=MODEL, **learn)
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True, proxy=proxy())
         page = browser.new_page(viewport=VIEW, user_agent=UA)
         page.goto(url, wait_until="domcontentloaded", timeout=90_000)  # B1
         page.wait_for_timeout(3000)
-        answer, steps = run(page, model, processor, a.task, out_dir, a.max_steps)
+        answer, history, frames = run(page, model, processor, a.task, out_dir, a.max_steps, used)
         browser.close()
 
-    trace("v4_results", task=a.task, url=url, answer=answer, steps=steps, success=answer is not None)
+    if a.learn:
+        learn["no_op_steps"] = sum(h.endswith("NOT change") for h in history)
+    trace("v4_results", task=a.task, url=url, answer=answer, steps=len(history), success=answer is not None, **learn)
     print(f"\nanswer: {answer or '(ran out of steps)'}\nscreenshots + replay.mp4: {out_dir}")
+    if a.learn:
+        reflect(model, processor, a.task, answer, history, frames, used)
 
 
-def run(page, model, processor, task, out_dir, max_steps):
-    """Step B on an already-loaded page. Returns (answer or None, steps taken)."""
+def reflect(model, processor, task, answer, history, frames, used):
+    """--learn: the VLM reviews the run (steps + screenshot grid) and updates runs/lessons.json. Never kills the run."""
+    t0, lessons, added, removed, error = time.time(), [], [], [], None
+    try:
+        out = ask(model, processor, learning.reflect_prompt(task, answer, history, used), learning.schema(used),
+                  learning.contact_sheet(frames), 400, "reflection")
+        lessons = learning.load()  # re-read: another --learn run may have saved since this one started
+        added, removed = learning.apply(lessons, used, out, task, RUN_ID)
+        learning.save(lessons)
+    except Exception as e:
+        error = f"{type(e).__name__}: {e}"
+        print(f"  (reflection failed: {error})", file=sys.stderr)
+    for tag, ls in (("+ lesson", added), ("x removed", removed)):
+        for l in ls:
+            print(f"{tag} [{l['id']}] {l['text']}")
+    trace("v4_reflections", task=task, success=answer is not None, steps=len(history),
+          no_op_steps=sum(h.endswith("NOT change") for h in history), active_lesson_ids=[l["id"] for l in used],
+          lessons_added_ids=[l["id"] for l in added], lessons_added=[l["text"] for l in added],
+          lessons_removed_ids=[l["id"] for l in removed], lessons_removed=[l["text"] for l in removed],
+          lessons_active_after=sum(l["active"] for l in lessons), latency_ms=round((time.time() - t0) * 1000), error=error)
+
+
+def run(page, model, processor, task, out_dir, max_steps, lessons=None):
+    """Step B on an already-loaded page. `lessons` (--learn only) go into the policy prompt.
+    Returns (answer or None, history lines, captioned frames)."""
     history, answer, frames, check_popup = [], None, [], True
     img = screenshot(page)
     for t in range(max_steps):
         t0 = time.time()  # B2: img is the current screen
+        MODEL_MS.clear()
         shot = out_dir / f"{t:02d}.png"
         img.save(shot)
         seen, url_before = img, page.url
@@ -245,7 +286,7 @@ def run(page, model, processor, task, out_dir, max_steps):
             line = f"close popup at ({pt[0]:.0f},{pt[1]:.0f})"
         else:
             prompt = PROMPT.format(today=datetime.date.today().isoformat(), task=task,
-                                   history="\n".join(history) or "(none)")
+                                   history="\n".join(history) or "(none)") + learning.prompt_block(lessons or ())
             d = ask(model, processor, prompt, ACTION, img)
             line, pt = act(page, model, processor, img, d["action"], d["arg"])  # B3
         if d["action"] != "done":
@@ -255,8 +296,10 @@ def run(page, model, processor, task, out_dir, max_steps):
                 line += " -> the screen did NOT change"
         frames.append(frame(seen, t, url_before, line, d["thought"], pt))
         print(f"\n[{t:02d}] {time.time() - t0:.1f}s  {page.url[:90]}\n  thought: {d['thought']}\n  action:  {line}")
+        learn = {} if lessons is None else {"active_lesson_ids": [l["id"] for l in lessons],
+                                            "no_op": line.endswith("NOT change"), "model_ms": dict(MODEL_MS)}
         trace("v4_steps", step=t, page_url=page.url, thought=d["thought"], action=d["action"], arg=d["arg"],
-              result=line, screenshot=str(shot), latency_ms=round((time.time() - t0) * 1000))  # B4
+              result=line, screenshot=str(shot), latency_ms=round((time.time() - t0) * 1000), **learn)  # B4
         history.append(line)
         # a "close" that changed nothing was a false alarm: let the policy act next step instead of looping on it
         check_popup = not (d["action"] == "close_popup" and line.endswith("NOT change"))
@@ -266,7 +309,7 @@ def run(page, model, processor, task, out_dir, max_steps):
 
     page.screenshot(path=out_dir / "final.png")
     save_video(frames, out_dir / "replay")
-    return answer, len(history)
+    return answer, history, frames
 
 
 if __name__ == "__main__":
