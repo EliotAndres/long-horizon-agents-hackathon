@@ -27,8 +27,13 @@ flowchart TD
 
 **B. Agent loop.** It runs until the model says `done` or `--max-steps` is reached.
 - **B1** loads the chosen page in headless Chromium (Playwright).
-- **B2** takes a screenshot. The VLM picks the next action from the screenshot, the task, its past actions and the learnings.
-- **B3** does the action. For a click, the VLM returns the target's bounding box and the agent clicks its centre. An action that leaves the screen unchanged is marked as such in the history.
+- **B2** takes a screenshot. The VLM picks the next action from the screenshot, the task, its past actions and the learnings. Some actions are refused before they run:
+  - a vague click target such as "date" or "results";
+  - the same action on a screen where it already ran, whether it did nothing there or led back to this screen in a loop;
+  - a click on a target that already did nothing twice.
+
+  When an action is refused, the VLM is asked again with the reason. If it is refused a second time, the VLM must pick a different kind of action.
+- **B3** does the action. For a click, the VLM returns the target's bounding box and the agent clicks its centre. A box that is degenerate, in the corner, at the screen edge or covering most of the screen is never clicked: the VLM gets one retry with a more concrete prompt, and after that the step is logged as not done. An action that leaves the screen unchanged is marked as such in the history.
 - **B4** sends the step (thought, action, result, URL, latency) to RawTree. These traces are what the learning agent learns from.
 
 ## Run
@@ -61,6 +66,6 @@ uv run python -m unittest discover -s tests            # tests, no model or netw
 - A lesson's id is `sha256(normalized text)[:16]`, so it stays the same across runs.
 - If the reflection fails, it is logged and the run is unaffected. Without `--learn`, the prompts and traces are unchanged.
 
-With `--learn`, RawTree also gets `learning` and `active_lesson_ids` on `v4_runs`, plus `no_op_steps` on `v4_results`. Each `v4_steps` row gets `active_lesson_ids`, `no_op` and `model_ms` (model time per call kind: `policy`, `grounding`). One `v4_reflections` row per run records success, steps, no-op steps, the ids and texts of lessons added and removed, the latency and any error.
+`v4_results` also gets `no_op_steps`, `rejected_actions` and `invalid_groundings`. With `--learn`, RawTree also gets `learning` and `active_lesson_ids` on `v4_runs`. Each `v4_steps` row gets `active_lesson_ids`, `no_op` and `model_ms` (model time per call kind: `policy`, `grounding`). One `v4_reflections` row per run records success, steps, no-op steps, the ids and texts of lessons added and removed, the latency and any error.
 
 `archived/browser-use-loop` holds the earlier MiniWoB flight-booking agent, which has a reflection and lessons loop and Tinybird telemetry.
