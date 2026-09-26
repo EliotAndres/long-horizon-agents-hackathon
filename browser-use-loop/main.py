@@ -16,11 +16,13 @@ import datetime
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import textwrap
 import time
 import urllib.request
+from collections import Counter
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -39,8 +41,15 @@ RUN_ID = time.strftime("%Y%m%d-%H%M%S")
 FONT = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial.ttf", 20)
 BOLD = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial Bold.ttf", 22)
 MODEL_MS = {}  # model time per call kind (policy, grounding, ...) since the last step, for --learn traces
+STATS = Counter()  # per run: rejected policy actions, invalid grounding boxes
+# click targets too generic to ground: the 3B model answers them with a corner or full-screen box
+VAGUE = {"date", "dates", "day", "time", "up", "down", "left", "right", "result", "results", "it", "this", "that", "here",
+         "there", "button", "field", "input", "link", "page", "screen", "element", "option", "item", "menu", "box",
+         "text", "calendar", "form", ""}
 
 PICK_PROMPT = """Which search result is the website where this task can best be done?
+Prefer an interactive page where the task can actually be completed (a search form, booking, cart or app page).
+Avoid articles, guides, lists, reviews and SEO landing pages when an interactive page is among the results.
 
 Request: {task}
 
@@ -60,8 +69,10 @@ Actions done so far:
 Pick the next action. Answer in JSON:
 "thought": what you see and why you pick this action,
 "action": "click", "type", "enter", "scroll" or "done",
-"arg": for click, what to click; for type, the text; for scroll, "up" or "down";
+"arg": for click, the exact visible element: its text or label and its kind, e.g. "Search button",
+"Where to? input field", "26 in the calendar"; for type, the text; for scroll, "up" or "down";
 for done, the answer to the task (what you found on the screen).
+Never repeat an action that did NOT change the screen: pick a different element or action.
 Use "done" only when the screen shows what the task asks for."""
 
 ACTION = {
@@ -139,7 +150,7 @@ def pick_site(model, processor, task):
     results = search(task)
     if not results:
         sys.exit("Nimble search returned no results")
-    listing = "\n".join(f"{n}. {title} ({urlparse(url).netloc})" for n, (title, url) in enumerate(results, 1))
+    listing = "\n".join(f"{n}. {title} ({url[:100]})" for n, (title, url) in enumerate(results, 1))
     print(f"search results:\n{listing}")
     schema = {"type": "object", "properties": {"pick": {"type": "integer", "minimum": 1, "maximum": len(results)}},
               "required": ["pick"]}
@@ -153,14 +164,91 @@ def proxy():
     return u and {"server": f"{u.scheme}://{u.hostname}:{u.port}", "username": u.username, "password": u.password}
 
 
+def key(d):
+    """What an action does, for spotting repeats: scroll and enter by effect (as act() runs them), others by target
+    in lowercase without articles or surrounding punctuation (symbols such as "›" or "+" and non-Latin text kept)."""
+    if d["action"] == "scroll":
+        return "scroll", "up" if d["arg"] == "up" else "down"
+    if d["action"] == "enter":
+        return "enter", ""
+    words = (w.strip("\"'.,:;!?()[]") for w in d["arg"].lower().split())
+    return d["action"], " ".join(w for w in words if w and w not in ("the", "a", "an"))
+
+
+def box_ok(b):
+    """Sanity check on a [0,1000] bbox before clicking it. The 3B model's "can't find it" answers are degenerate
+    boxes in the top-left corner (a click at (0,0) or (1,26)) or the whole screen (a click at the centre)."""
+    x1, y1, x2, y2 = b
+    w, h, cx, cy = x2 - x1, y2 - y1, (x1 + x2) / 2, (y1 + y2) / 2
+    return w >= 4 and h >= 4 and w * h <= 250_000 and 15 < cx < 985 and 15 < cy < 985
+
+
+def ground(model, processor, img, arg):
+    """Click point for `arg` in page pixels, or None when the box is unusable twice. Never clicks a bad box."""
+    for prompt in (f"Detect {arg}. Output its bounding box as JSON.",
+                   f"Detect the visible {arg} element on this web page (a button, link, input field or text). "
+                   "Output its bounding box as JSON."):
+        b = ask(model, processor, prompt, BBOX, img, 60, "grounding")["bbox"]
+        if box_ok(b):
+            return (b[0] + b[2]) / 2000 * VIEW["width"], (b[1] + b[3]) / 2000 * VIEW["height"]
+        STATS["invalid_grounding"] += 1
+    return None
+
+
+REASONS = {  # rejected() code -> what the policy is told
+    "vague": 'the target is too vague: name the exact visible element and its kind, e.g. "Search button"',
+    "no-op twice": "clicking it already did nothing twice: pick a different element or a different kind of action",
+    "no-op here": "it already did nothing on this same screen: pick a different element or action",
+    "loop": "it already ran on this same screen and the screen came back to this state, so repeating it goes in a "
+            "circle: it already took effect, pick a different element or action",
+}
+
+
+def rejected(d, img, tried):
+    """Why the policy's action must not run (a REASONS code), or None. `tried` = (screen, key, no-op?) of past
+    actions. The same action on a screen where it already ran would do the same again: nothing, or go round a loop
+    (e.g. a round-trip calendar that flips between two states on each click of the same day)."""
+    k = key(d)
+    if d["action"] == "click" and k[1] in VAGUE:
+        return "vague"
+    same = [(screen, noop) for screen, kk, noop in tried if kk == k]
+    if d["action"] == "click" and sum(noop for _, noop in same) >= 2:
+        return "no-op twice"
+    for screen, noop in same:
+        if unchanged(screen, img):
+            return "no-op here" if noop else "loop"
+    return None
+
+
+def decide(model, processor, prompt, img, tried):
+    """B2: the policy's next action, never one that `rejected` refuses. A refusal is re-asked with the reason; the
+    second retry may only use a kind of action not refused yet (constrained decoding); if that is refused too, nothing
+    runs this step (action "wait"). Retries may not answer "done": a refused model escapes into a made-up answer.
+    Returns (action, short notes on what was refused)."""
+    d, notes, refused = ask(model, processor, prompt, ACTION, img), [], set()
+    for attempt in range(3):
+        code = rejected(d, img, tried)
+        if not code:
+            return d, notes
+        STATS["rejected"] += 1
+        notes.append(f'rejected {d["action"]}("{d["arg"]}"): {code}')
+        refused.add(d["action"])
+        prompt += f'\nYour action {d["action"]}("{d["arg"]}") was REJECTED: {REASONS[code]}.'
+        if attempt < 2:
+            kinds = [k for k in ACTION["properties"]["action"]["enum"] if k != "done" and (not attempt or k not in refused)]
+            d = ask(model, processor, prompt, {**ACTION, "properties": {**ACTION["properties"], "action": {"enum": kinds}}},
+                    img)
+    return {"thought": "Every proposed action was refused.", "action": "wait", "arg": ""}, notes
+
+
 def act(page, model, processor, img, kind, arg):
     """B3: run one action on the page, return a log line."""
     if kind == "click":
-        x1, y1, x2, y2 = ask(model, processor, f"Detect {arg}. Output its bounding box as JSON.", BBOX, img, 60,
-                             "grounding")["bbox"]
-        x, y = (x1 + x2) / 2000 * VIEW["width"], (y1 + y2) / 2000 * VIEW["height"]
-        page.mouse.click(x, y)
-        return f'click("{arg}") at ({x:.0f},{y:.0f})', (x, y)
+        pt = ground(model, processor, img, arg)
+        if pt is None:
+            return f'click("{arg}") NOT done: could not locate it on the screen', None
+        page.mouse.click(*pt)
+        return f'click("{arg}") at ({pt[0]:.0f},{pt[1]:.0f})', pt
     if kind == "type":
         page.keyboard.type(arg, delay=80)  # per-key delay so autocompletes fire
         return f'type("{arg}")', None
@@ -170,6 +258,8 @@ def act(page, model, processor, img, kind, arg):
     if kind == "scroll":
         page.mouse.wheel(0, -500 if arg == "up" else 500)
         return f'scroll("{arg}")', None
+    if kind == "wait":
+        return "no action: every proposal was refused", None
     return f'done("{arg}")', None
 
 
@@ -239,10 +329,12 @@ def main():
         answer, history, frames = run(page, model, processor, a.task, out_dir, a.max_steps, used, learnings)
         browser.close()
 
-    if a.learn:
-        learn["no_op_steps"] = sum(h.endswith("NOT change") for h in history)
-    trace("v4_results", task=a.task, url=url, answer=answer, steps=len(history), success=answer is not None, **learn)
+    no_ops = sum(h.endswith("NOT change") for h in history)
+    trace("v4_results", task=a.task, url=url, answer=answer, steps=len(history), success=answer is not None,
+          no_op_steps=no_ops, rejected_actions=STATS["rejected"], invalid_groundings=STATS["invalid_grounding"], **learn)
     print(f"\nanswer: {answer or '(ran out of steps)'}\nscreenshots + replay.mp4: {out_dir}")
+    print(f"steps {len(history)}, no-ops {no_ops}, rejected actions {STATS['rejected']}, "
+          f"invalid groundings {STATS['invalid_grounding']}")
     if a.learn:
         reflect(model, processor, a.task, answer, history, frames, used)
 
@@ -272,7 +364,8 @@ def reflect(model, processor, task, answer, history, frames, used):
 def run(page, model, processor, task, out_dir, max_steps, lessons=None, learnings=()):
     """Step B on an already-loaded page. `learnings` (step L) and `lessons` (--learn only) go into the policy prompt.
     Returns (answer or None, history lines, captioned frames)."""
-    history, answer, frames = [], None, []
+    history, answer, frames, tried = [], None, [], []
+    STATS.clear()
     tips = "".join(f"\nLearning from past runs (follow it when it applies): {l}" for l in learnings)
     img = screenshot(page)
     for t in range(max_steps):
@@ -283,14 +376,17 @@ def run(page, model, processor, task, out_dir, max_steps, lessons=None, learning
         seen, url_before = img, page.url
         prompt = PROMPT.format(today=datetime.date.today().isoformat(), task=task,
                                history="\n".join(history) or "(none)", learnings=tips) + learning.prompt_block(lessons or ())
-        d = ask(model, processor, prompt, ACTION, img)
+        d, notes = decide(model, processor, prompt, img, tried)
         line, pt = act(page, model, processor, img, d["action"], d["arg"])  # B3
         if d["action"] != "done":
             page.wait_for_timeout(2000)
             img = screenshot(page)
-            if unchanged(seen, img):
+            tried.append((seen, key(d), unchanged(seen, img)))
+            if tried[-1][-1]:
                 line += " -> the screen did NOT change"
-        frames.append(frame(seen, t, url_before, line, d["thought"], pt))
+        notes = "".join(f"[{n}] " for n in notes)
+        frames.append(frame(seen, t, url_before, line, notes + d["thought"], pt))  # caption: the action that ran
+        line = notes + line
         print(f"\n[{t:02d}] {time.time() - t0:.1f}s  {page.url[:90]}\n  thought: {d['thought']}\n  action:  {line}")
         learn = {} if lessons is None else {"active_lesson_ids": [l["id"] for l in lessons],
                                             "no_op": line.endswith("NOT change"), "model_ms": dict(MODEL_MS)}
